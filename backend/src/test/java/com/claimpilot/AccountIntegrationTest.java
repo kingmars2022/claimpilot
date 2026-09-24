@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.Map;
@@ -82,5 +83,29 @@ class AccountIntegrationTest extends IntegrationTestBase {
                         .content(json(Map.of("username", "leaving.member", "password", "password123"))))
                 .andExpect(status().isUnauthorized());
         assertThat(mongo.count(logsOfUser, ExtractionLog.class)).isZero();
+    }
+
+    @Test
+    void notificationStreamAcceptsTheTokenInTheUrlButOtherEndpointsDoNot() throws Exception {
+        String token = login("sam");
+
+        mvc.perform(get("/api/notifications/stream").param("access_token", token))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted());
+        mvc.perform(get("/api/notifications/stream")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/policies").param("access_token", token)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void activityLogListsWhatTheUserDid() throws Exception {
+        String token = login("sam");
+        mvc.perform(as(token, put("/api/profile").contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("fullName", "Sam Okafor")))))
+                .andExpect(status().isOk());
+
+        String activity = mvc.perform(as(token, get("/api/audit"))).andReturn().getResponse().getContentAsString();
+
+        java.util.List<String> actions = JsonPath.read(activity, "$[*].action");
+        assertThat(actions).startsWith("PROFILE_UPDATED").contains("SIGNED_IN");
     }
 }

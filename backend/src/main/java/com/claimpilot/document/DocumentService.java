@@ -12,8 +12,11 @@ import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.claimpilot.audit.AuditAction;
+import com.claimpilot.audit.AuditService;
 import com.claimpilot.common.NotFoundException;
 import com.claimpilot.conversation.ConversationRepository;
+import com.claimpilot.events.ProcessingDispatcher;
 import com.claimpilot.extraction.DocumentFactRepository;
 import com.claimpilot.extraction.ExtractionLogRepository;
 import com.claimpilot.storage.FileStorage;
@@ -27,18 +30,21 @@ public class DocumentService {
 
     private final DocumentRepository repository;
     private final FileStorage storage;
-    private final ProcessingService processing;
+    private final ProcessingDispatcher dispatcher;
+    private final AuditService audit;
     private final VectorStore vectorStore;
     private final DocumentFactRepository facts;
     private final ExtractionLogRepository extractionLogs;
     private final ConversationRepository conversations;
 
-    public DocumentService(DocumentRepository repository, FileStorage storage, ProcessingService processing,
+    public DocumentService(DocumentRepository repository, FileStorage storage, ProcessingDispatcher dispatcher,
+                           AuditService audit,
                            VectorStore vectorStore, DocumentFactRepository facts,
                            ExtractionLogRepository extractionLogs, ConversationRepository conversations) {
         this.repository = repository;
         this.storage = storage;
-        this.processing = processing;
+        this.dispatcher = dispatcher;
+        this.audit = audit;
         this.vectorStore = vectorStore;
         this.facts = facts;
         this.extractionLogs = extractionLogs;
@@ -65,7 +71,8 @@ public class DocumentService {
         }
         UploadedDocument saved = repository.save(
                 new UploadedDocument(owner.getId(), kind, fileName, file.getContentType(), file.getSize(), key));
-        processing.processAsync(saved.getId());
+        audit.record(owner.getId(), AuditAction.DOCUMENT_UPLOADED, kind.name(), saved.getId(), fileName);
+        dispatcher.documentUploaded(saved.getId());
         return DocumentResponse.from(saved, List.of());
     }
 
@@ -101,6 +108,7 @@ public class DocumentService {
     public void delete(AppUser owner, DocumentKind kind, UUID id) {
         UploadedDocument doc = find(owner, kind, id);
         remove(doc);
+        audit.record(owner.getId(), AuditAction.DOCUMENT_DELETED, kind.name(), id, doc.getFileName());
         if (kind == DocumentKind.POLICY) {
             conversations.deleteByOwnerAndPolicyId(owner.getUsername(), id);
         }

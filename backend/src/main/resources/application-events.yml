@@ -1,0 +1,8 @@
+# Phase 3 infrastructure, all free and local: RustFS in place of Amazon S3, Kafka for events.
+#   docker compose --profile events up -d
+#   SPRING_PROFILES_ACTIVE=events ./mvnw spring-boot:run
+claimpilot:
+  storage:
+    type: s3
+  events:
+    mode: kafka

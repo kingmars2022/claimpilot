@@ -76,6 +76,11 @@ public class EncryptedFileStorage implements FileStorage {
         delegate.delete(key);
     }
 
+    @Override
+    public String toString() {
+        return delegate + ", encrypted with AES-256-GCM";
+    }
+
     byte[] encrypt(byte[] plain) {
         try {
             byte[] iv = new byte[IV_BYTES];

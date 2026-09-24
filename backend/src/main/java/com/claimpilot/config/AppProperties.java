@@ -9,13 +9,36 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties(prefix = "claimpilot")
 public record AppProperties(Storage storage, Indexing indexing, Retrieval retrieval, Security security,
-                            Conversation conversation, Ocr ocr) {
+                            Conversation conversation, Ocr ocr, Events events) {
 
     /**
+     * @param type          "local" (a folder on disk) or "s3" (Amazon S3, or RustFS locally)
      * @param localRoot     folder for uploaded files when they are kept on the local disk
      * @param encryptionKey base64 AES-256 key; files are encrypted at rest when it is set
      */
-    public record Storage(String localRoot, String encryptionKey) {
+    public record Storage(String type, String localRoot, String encryptionKey, S3 s3) {
+    }
+
+    /**
+     * @param endpoint  empty for Amazon S3; the RustFS URL locally, for example http://localhost:9000
+     * @param pathStyle true for RustFS (bucket in the path rather than the host name)
+     * @param accessKey empty to use the default AWS credentials chain (environment, instance role)
+     */
+    public record S3(String endpoint, String region, String bucket, String accessKey, String secretKey,
+                     boolean pathStyle) {
+    }
+
+    /**
+     * @param mode           "inline": uploads are processed on a background thread of this server;
+     *                       "kafka": an event is published and a worker consumes it
+     * @param uploadedTopic  events for new uploads, consumed by the processing workers
+     * @param processedTopic events for finished processing, relayed to the users' browsers
+     */
+    public record Events(String mode, String uploadedTopic, String processedTopic) {
+
+        public boolean kafka() {
+            return "kafka".equalsIgnoreCase(mode);
+        }
     }
 
     /**

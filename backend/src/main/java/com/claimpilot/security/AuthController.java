@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.claimpilot.audit.AuditAction;
+import com.claimpilot.audit.AuditService;
 import com.claimpilot.user.AppUser;
 import com.claimpilot.user.CurrentUserService;
 import com.claimpilot.user.UserRepository;
@@ -30,9 +32,11 @@ public class AuthController {
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokens;
     private final CurrentUserService currentUser;
+    private final AuditService audit;
 
     public AuthController(UserRepository users, PasswordEncoder passwordEncoder, TokenService tokens,
-                          CurrentUserService currentUser) {
+                          CurrentUserService currentUser, AuditService audit) {
+        this.audit = audit;
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.tokens = tokens;
@@ -45,6 +49,7 @@ public class AuthController {
         AppUser user = users.findByUsername(request.username().strip())
                 .filter(u -> passwordEncoder.matches(request.password(), u.getPasswordHash()))
                 .orElseThrow(() -> new BadCredentialsException("Invalid username or password."));
+        audit.record(user.getId(), AuditAction.SIGNED_IN, null, null, null);
         TokenService.IssuedToken token = tokens.issue(user);
         return new LoginResponse(token.value(), token.expiresAt(), UserResponse.from(user));
     }
@@ -59,6 +64,7 @@ public class AuthController {
         }
         AppUser user = users.save(new AppUser(username, request.displayName().strip(),
                 passwordEncoder.encode(request.password())));
+        audit.record(user.getId(), AuditAction.SIGNED_UP, null, null, null);
         TokenService.IssuedToken token = tokens.issue(user);
         return new LoginResponse(token.value(), token.expiresAt(), UserResponse.from(user));
     }

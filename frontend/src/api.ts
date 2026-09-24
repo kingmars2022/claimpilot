@@ -158,6 +158,23 @@ export interface FormOption {
   createdAt: string | null;
 }
 
+export interface AppNotification {
+  type: 'DOCUMENT_READY' | 'DOCUMENT_FAILED';
+  documentId: string;
+  kind: DocumentKind;
+  fileName: string;
+  message: string;
+  at: string;
+}
+
+export interface ActivityEntry {
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  detail: string | null;
+  at: string;
+}
+
 export interface Profile {
   fullName: string | null;
   dateOfBirth: string | null;
@@ -215,6 +232,11 @@ export function setToken(value: string | null) {
   } catch {
     // storage unavailable: the session lasts until the page is reloaded
   }
+}
+
+/** The live notification stream. EventSource cannot send headers, so the token goes in the URL. */
+export function notificationStreamUrl() {
+  return token ? `/api/notifications/stream?access_token=${encodeURIComponent(token)}` : null;
 }
 
 export function hasToken() {
@@ -313,6 +335,9 @@ export const api = {
     link.click();
     URL.revokeObjectURL(url);
   },
+
+  notifications: () => request<AppNotification[]>('/api/notifications'),
+  activity: () => request<ActivityEntry[]>('/api/audit'),
 
   profile: () => request<Profile>('/api/profile'),
   saveProfile: (profile: Profile) => request<Profile>('/api/profile', json('PUT', profile)),

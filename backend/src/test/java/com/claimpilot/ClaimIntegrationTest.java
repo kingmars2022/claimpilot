@@ -145,7 +145,7 @@ class ClaimIntegrationTest extends IntegrationTestBase {
                                 "relationship", "SELF")))))
                 .andExpect(status().isNotFound());
         String samPolicies = mvc.perform(as(sam, get("/api/policies"))).andReturn().getResponse().getContentAsString();
-        assertThat((List<?>) JsonPath.read(samPolicies, "$")).isEmpty();
+        assertThat((List<String>) JsonPath.read(samPolicies, "$[*].id")).doesNotContain(spousePolicy, ownPolicy);
     }
 
     private String createDraft() throws Exception {

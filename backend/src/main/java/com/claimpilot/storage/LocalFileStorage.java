@@ -53,6 +53,11 @@ public class LocalFileStorage implements FileStorage {
         return path;
     }
 
+    @Override
+    public String toString() {
+        return "folder " + root;
+    }
+
     /** Keeps letters in any script (é, 中) and digits; replaces everything else. */
     static String sanitize(String name) {
         String base = (name == null || name.isBlank()) ? "document" : name.strip();

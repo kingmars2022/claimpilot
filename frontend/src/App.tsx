@@ -4,6 +4,7 @@ import AskView from './components/AskView';
 import ClaimView from './components/ClaimView';
 import DocumentsView from './components/DocumentsView';
 import LoginView from './components/LoginView';
+import Notifications from './components/Notifications';
 import ProfileView from './components/ProfileView';
 
 type View = 'ask' | 'claim' | 'documents' | 'profile';
@@ -53,6 +54,7 @@ export default function App() {
         {view === 'documents' && <DocumentsView />}
         {view === 'profile' && <ProfileView />}
       </main>
+      <Notifications key={user.id} />
       <footer className="disclaimer">
         ClaimPilot explains what your policy says. It is not insurance or legal advice. Demo data is fictional.
       </footer>

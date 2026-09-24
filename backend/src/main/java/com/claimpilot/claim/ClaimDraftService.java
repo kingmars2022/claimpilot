@@ -12,6 +12,8 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.claimpilot.audit.AuditAction;
+import com.claimpilot.audit.AuditService;
 import com.claimpilot.common.NotFoundException;
 import com.claimpilot.document.DocumentKind;
 import com.claimpilot.document.DocumentService;
@@ -38,9 +40,12 @@ public class ClaimDraftService {
     private final ProfileRepository profiles;
     private final FieldMappingService mappings;
     private final FormCatalog forms;
+    private final AuditService audit;
 
     public ClaimDraftService(ClaimDraftRepository drafts, DocumentService documents, DocumentFactRepository facts,
-                             ProfileRepository profiles, FieldMappingService mappings, FormCatalog forms) {
+                             ProfileRepository profiles, FieldMappingService mappings, FormCatalog forms,
+                             AuditService audit) {
+        this.audit = audit;
         this.drafts = drafts;
         this.documents = documents;
         this.facts = facts;
@@ -73,7 +78,10 @@ public class ClaimDraftService {
         for (DataKey key : fieldsOnForm(form)) {
             draft.addField(key, values.getOrDefault(key, DraftValue.missing()));
         }
-        return toDto(user, drafts.save(draft));
+        ClaimDraft saved = drafts.save(draft);
+        audit.record(user.getId(), AuditAction.CLAIM_CREATED, "CLAIM", saved.getId(),
+                request.claimType().label() + " on " + forms.name(user, formKey));
+        return toDto(user, saved);
     }
 
     public List<ClaimDtos.Draft> list(AppUser user) {
@@ -91,6 +99,7 @@ public class ClaimDraftService {
                 .orElseThrow(() -> new NotFoundException("This form has no field " + key + "."));
         if (request.value() != null) {
             field.correct(request.value());
+            audit.record(user.getId(), AuditAction.CLAIM_FIELD_CORRECTED, "CLAIM", id, key.label());
         }
         if (request.reviewed() != null) {
             field.setReviewed(request.reviewed());
@@ -108,12 +117,16 @@ public class ClaimDraftService {
         Map<DataKey, String> values = new EnumMap<>(DataKey.class);
         draft.getFields().forEach(f -> values.put(f.getDataKey(), f.getValue()));
         FormTemplate form = forms.resolve(user, draft.getFormKey());
-        return PdfFormFiller.fill(form, mappings.mappingFor(form), values);
+        byte[] pdf = PdfFormFiller.fill(form, mappings.mappingFor(form), values);
+        audit.record(user.getId(), AuditAction.CLAIM_DOWNLOADED, "CLAIM", id, form.name());
+        return pdf;
     }
 
     @Transactional
     public void delete(AppUser user, UUID id) {
-        drafts.delete(find(user, id));
+        ClaimDraft draft = find(user, id);
+        drafts.delete(draft);
+        audit.record(user.getId(), AuditAction.CLAIM_DELETED, "CLAIM", id, draft.getClaimType().label());
     }
 
     public String fileName(AppUser user, UUID id) {

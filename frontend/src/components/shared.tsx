@@ -17,6 +17,18 @@ export const STATUS_LABELS: Record<UploadedDocument['status'], string> = {
   FAILED: 'Failed',
 };
 
+/** Name of the window event fired when the server says a document finished processing. */
+export const DOCUMENT_EVENT = 'claimpilot:document';
+
+/** Calls refresh as soon as a notification says a document is ready (polling stays as a fallback). */
+function useDocumentEvents(refresh: () => Promise<void>) {
+  useEffect(() => {
+    const listener = () => void refresh();
+    window.addEventListener(DOCUMENT_EVENT, listener);
+    return () => window.removeEventListener(DOCUMENT_EVENT, listener);
+  }, [refresh]);
+}
+
 /** The user's policies or receipts, refreshed every 2 s while any is still being read. */
 export function useDocuments(kind: DocumentKind) {
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
@@ -37,6 +49,7 @@ export function useDocuments(kind: DocumentKind) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+  useDocumentEvents(refresh);
 
   const busy = documents.some((d) => d.status === 'UPLOADED' || d.status === 'PROCESSING');
   useEffect(() => {
@@ -65,6 +78,7 @@ export function useForms() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+  useDocumentEvents(refresh);
 
   const busy = forms.some((f) => f.status === 'UPLOADED' || f.status === 'PROCESSING');
   useEffect(() => {

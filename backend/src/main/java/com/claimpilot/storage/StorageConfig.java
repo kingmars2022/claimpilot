@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 
 import com.claimpilot.config.AppProperties;
 
+/** Local disk or S3 (RustFS locally), encrypted at rest when a key is configured. */
 @Configuration
 public class StorageConfig {
 
@@ -14,12 +15,16 @@ public class StorageConfig {
 
     @Bean
     FileStorage fileStorage(AppProperties properties) {
-        FileStorage storage = new LocalFileStorage(properties.storage().localRoot());
+        FileStorage storage = "s3".equalsIgnoreCase(properties.storage().type())
+                ? S3FileStorage.create(properties.storage().s3())
+                : new LocalFileStorage(properties.storage().localRoot());
         String key = properties.storage().encryptionKey();
         if (key == null || key.isBlank()) {
             log.warn("File encryption is off: set claimpilot.storage.encryption-key to encrypt uploads at rest");
-            return storage;
+        } else {
+            storage = new EncryptedFileStorage(storage, key);
         }
-        return new EncryptedFileStorage(storage, key);
+        log.info("Uploaded files are kept in {}", storage);
+        return storage;
     }
 }
