@@ -351,7 +351,22 @@ cd backend
 ```
 
 It runs the real models and writes `target/eval-report.md`: answer status accuracy, cited page,
-expected content, facts extracted, average answer time. It is not part of the normal build.
+expected content, facts extracted, average answer time. It is not part of the normal build; the
+**Accuracy evaluation** workflow runs it on GitHub Actions (Ollama on the runner's CPU) weekly and on
+demand.
+
+Latest result (qwen3:8b, bge-m3, CPU runner):
+
+| Metric | Result |
+|---|---|
+| Answer status (answered / unclear / not in policy) | 16 / 17 (94%) |
+| Cited the expected page | 14 / 14 (100%) |
+| Answer contains the expected facts | 17 / 17 (100%) |
+| Key facts extracted correctly | 13 / 13 (100%) |
+
+The remaining miss: asked whether a $900 dental plan needs a predetermination (the policy requires one
+over $500), the model answers "unclear" instead of applying the threshold. It errs on the cautious
+side, and the answer still cites the right clause.
 
 ## Principles
 
