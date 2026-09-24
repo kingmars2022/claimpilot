@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
@@ -35,6 +36,8 @@ public class FieldMappingService {
 
     private final ChatClient chatClient;
     private final FormFieldMappingRepository repository;
+    /** A form version's mapping never changes, so it is kept in memory after the first read. */
+    private final Map<String, Map<String, DataKey>> byVersion = new ConcurrentHashMap<>();
 
     public FieldMappingService(ChatClient.Builder builder, FormFieldMappingRepository repository) {
         this.chatClient = builder.build();
@@ -44,6 +47,16 @@ public class FieldMappingService {
     /** PDF field name to data key, in form order. Calls the model only the first time a form is seen. */
     @Transactional
     public Map<String, DataKey> mappingFor(FormTemplate template) {
+        Map<String, DataKey> known = byVersion.get(template.sha256());
+        if (known != null) {
+            return known;
+        }
+        Map<String, DataKey> mapping = load(template);
+        byVersion.put(template.sha256(), mapping);
+        return mapping;
+    }
+
+    private Map<String, DataKey> load(FormTemplate template) {
         List<FormFieldMapping> stored = repository.findByTemplateSha256(template.sha256());
         if (!stored.isEmpty()) {
             Map<String, DataKey> cached = new LinkedHashMap<>();

@@ -60,6 +60,8 @@ claimpilot:
   storage:
     type: local              # local | s3 (RustFS locally, Amazon S3 in the cloud)
     local-root: ./data/uploads
+    max-files-per-user: 100
+    max-bytes-per-user: 500000000   # 500 MB
     # AES-256 key (base64, 32 bytes) for encrypting uploads at rest. Development default only:
     # set CLAIMPILOT_STORAGE_ENCRYPTION_KEY anywhere else (openssl rand -base64 32).
     encryption-key: ${CLAIMPILOT_STORAGE_ENCRYPTION_KEY:ZGV2LW9ubHktZmlsZS1rZXktY2hhbmdlLW1lLTAxMjM=}
@@ -74,11 +76,16 @@ claimpilot:
     mode: inline             # inline | kafka (docker compose --profile events, then the "events" Spring profile)
     uploaded-topic: claimpilot.documents.uploaded
     processed-topic: claimpilot.documents.processed
+    instance-id: ${HOSTNAME:local}   # names this server's consumer group for notifications
   cache:
     type: memory             # memory | redis (docker compose --profile cache, then the "cache" Spring profile)
     ttl: 24h                 # a model reply is reused for the same prompt and user for this long
     model-requests-per-minute: 20
     login-attempts-per-minute: 10   # per client address and per username
+  processing:
+    max-concurrent: 2        # documents read at the same time per server; the rest wait their turn
+  audit:
+    retention: 365d          # activity log entries older than this are deleted every night
   indexing:
     chunk-size: 300          # tokens per chunk; Markdown is first split at headings
   retrieval:

@@ -78,7 +78,11 @@ modules above in order, each with its own checks.
   the user under Profile. Values from documents are never written to the log.
 - **Fair use**: requests that use the model are limited per user per minute, and sign-in attempts per
   address and per username (429 with Retry-After); identical prompts to the same model are answered
-  from a cache.
+  from a cache. The web server sends a strict Content-Security-Policy and never leaks URLs as referrers.
+- **Limits that protect the server**: at most two documents are processed at once per server (the
+  rest wait their turn); each user can keep 100 files and 500 MB; the activity log keeps one year.
+- **Deletion that cannot half-fail**: *Delete my data* locks the account first, then removes
+  everything; if a step is interrupted, a background job finishes it within minutes.
 - **Safe defaults**: the development keys in this repository are refused when
   `claimpilot.security.allow-dev-secrets` is false (the `aws` profile). With Kafka's at-least-once
   delivery, processing the same upload twice changes nothing.
@@ -163,7 +167,9 @@ Shown at the top of this page. When the claim is started:
   which is deterministic and unit-tested.
 - **Hard rules in code, not in the prompt.** Signature, declaration and consent fields are forced to
   stay blank even if the model maps them to a value (a test checks exactly that). An "answered"
-  reply that cites nothing is downgraded to "unclear". Guide items without a valid clause are dropped.
+  reply that cites nothing is downgraded to "unclear", and so is one that rests on a discretionary
+  clause ("may be considered", "at the insurer's discretion"). Guide items without a valid clause
+  are dropped.
 - **Data isolation.** Every chunk in pgvector carries its owner's id, and every search is filtered
   by the signed-in user and the chosen policy, so another person's policy text never reaches the model.
 - **Prompt-injection guard.** Document text is passed as data, with instructions to ignore any

@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.List;
 import java.util.Map;
 
 import com.jayway.jsonpath.JsonPath;
@@ -18,17 +19,26 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 
+import com.claimpilot.audit.AuditService;
 import com.claimpilot.events.NotificationService;
 import com.claimpilot.extraction.ExtractionLog;
 import com.claimpilot.samples.SampleDocuments;
 import com.claimpilot.support.IntegrationTestBase;
+import com.claimpilot.user.AccountService;
 
 /** Sign-in, sign-up, the profile, and deleting every piece of a user's data. */
 class AccountIntegrationTest extends IntegrationTestBase {
 
     @Autowired
     private NotificationService notifications;
+    @Autowired
+    private AccountService accounts;
+    @Autowired
+    private AuditService audit;
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @Autowired
     MongoTemplate mongo;
@@ -109,6 +119,46 @@ class AccountIntegrationTest extends IntegrationTestBase {
         mvc.perform(get("/api/notifications/stream")).andExpect(status().isUnauthorized());
         mvc.perform(as(ticket, get("/api/policies"))).andExpect(status().isForbidden());
         mvc.perform(get("/api/policies").param("access_token", token)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void anInterruptedDeletionLocksTheAccountAndIsFinishedInTheBackground() throws Exception {
+        String body = mvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("username", "half.deleted", "displayName", "Half",
+                                "password", "password123"))))
+                .andReturn().getResponse().getContentAsString();
+        String token = JsonPath.read(body, "$.token");
+        Integer userId = JsonPath.read(body, "$.user.id");
+        upload(token, "receipts", SampleDocuments.RECEIPT_PDF, SampleDocuments.receiptPdf());
+        // The server stopped right after recording the request.
+        jdbc.update("UPDATE users SET deletion_requested_at = now() WHERE id = ?", userId);
+
+        mvc.perform(as(token, get("/api/receipts"))).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("username", "half.deleted", "password", "password123"))))
+                .andExpect(status().isUnauthorized());
+
+        accounts.resumePendingDeletions();
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM users WHERE id = ?", Integer.class, userId)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM documents WHERE owner_id = ?", Integer.class, userId))
+                .isZero();
+    }
+
+    @Test
+    void oldActivityIsDeletedAfterTheRetentionPeriod() throws Exception {
+        String token = login("sam");
+        Long samId = jdbc.queryForObject("SELECT id FROM users WHERE username = 'sam'", Long.class);
+        jdbc.update("INSERT INTO audit_events (user_id, action, created_at) VALUES (?, 'SIGNED_IN', "
+                + "now() - interval '400 days')", samId);
+
+        assertThat(audit.purgeExpired()).isPositive();
+
+        Integer old = jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE user_id = ? "
+                + "AND created_at < now() - interval '365 days'", Integer.class, samId);
+        assertThat(old).isZero();
+        String activity = mvc.perform(as(token, get("/api/audit"))).andReturn().getResponse().getContentAsString();
+        assertThat((List<String>) JsonPath.read(activity, "$[*].action")).contains("SIGNED_IN");
     }
 
     @Test

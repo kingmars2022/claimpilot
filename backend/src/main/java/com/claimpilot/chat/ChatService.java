@@ -94,6 +94,10 @@ public class ChatService {
                 // An answer that cites nothing is not grounded: treat it as unclear and show the clauses.
                 status = AnswerStatus.UNCLEAR;
             }
+            if (status == AnswerStatus.ANSWERED && DiscretionaryWording.decides(answer, citedTexts(answer, sources))) {
+                // The clause leaves it to the insurer ("may be considered"): not a yes.
+                status = AnswerStatus.UNCLEAR;
+            }
             if (status == AnswerStatus.NOT_IN_POLICY || answer.isBlank()) {
                 status = AnswerStatus.NOT_IN_POLICY;
                 answer = language.notInPolicyMessage();
@@ -178,6 +182,16 @@ public class ChatService {
             }
         }
         return citations;
+    }
+
+    private static List<String> citedTexts(String answer, List<Document> sources) {
+        List<String> texts = new ArrayList<>();
+        for (int index : PromptBuilder.citedIndices(answer)) {
+            if (index >= 1 && index <= sources.size()) {
+                texts.add(sources.get(index - 1).getText());
+            }
+        }
+        return texts;
     }
 
     private static List<Citation> asCitations(List<Document> sources) {

@@ -1,6 +1,9 @@
 package com.claimpilot.user;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.claimpilot.conversation.ConversationService;
@@ -14,6 +17,8 @@ import com.claimpilot.extraction.ExtractionLogRepository;
  */
 @Service
 public class AccountService {
+
+    private static final Logger log = LoggerFactory.getLogger(AccountService.class);
 
     private final DocumentService documents;
     private final ConversationService conversations;
@@ -31,7 +36,38 @@ public class AccountService {
         this.users = users;
     }
 
-    public void deleteEverything(AppUser user) {
+    /**
+     * Marks the account for deletion (it stops working at once), then deletes everything. Each step
+     * can be repeated safely, so when one fails the job below finishes the deletion within minutes.
+     *
+     * @return true when everything is already gone, false when the rest will be finished by the job
+     */
+    public boolean deleteEverything(AppUser user) {
+        user.requestDeletion();
+        users.save(user);
+        try {
+            finish(user);
+            return true;
+        } catch (RuntimeException ex) {
+            log.warn("Deleting account {} was interrupted; it will be finished in the background", user.getId(), ex);
+            return false;
+        }
+    }
+
+    /** Finishes deletions that were interrupted (a database or storage outage, a restart). */
+    @Scheduled(fixedDelayString = "PT10M", initialDelayString = "PT1M")
+    public void resumePendingDeletions() {
+        for (AppUser user : users.findByDeletionRequestedAtIsNotNull()) {
+            try {
+                finish(user);
+                log.info("Finished deleting account {}", user.getId());
+            } catch (RuntimeException ex) {
+                log.warn("Deleting account {} failed again; will retry", user.getId(), ex);
+            }
+        }
+    }
+
+    private void finish(AppUser user) {
         documents.deleteAll(user);
         conversations.deleteAll(user.getUsername());
         extractionLogs.deleteByOwnerId(user.getId());

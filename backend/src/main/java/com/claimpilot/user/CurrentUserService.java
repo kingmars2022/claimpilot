@@ -24,6 +24,7 @@ public class CurrentUserService {
             throw new InsufficientAuthenticationException("Not signed in.");
         }
         return users.findByUsername(authentication.getName())
+                .filter(user -> !user.isDeletionPending())
                 .orElseThrow(() -> new InsufficientAuthenticationException("This account no longer exists."));
     }
 }

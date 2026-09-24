@@ -288,7 +288,8 @@ async function send(url: string, init: RequestInit = {}): Promise<Response> {
 
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   const response = await send(url, init);
-  return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
+  const body = response.status === 204 ? '' : await response.text();
+  return (body ? JSON.parse(body) : undefined) as T;
 }
 
 function json(method: string, body: unknown): RequestInit {

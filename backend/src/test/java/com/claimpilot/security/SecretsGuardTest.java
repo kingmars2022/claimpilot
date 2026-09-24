@@ -34,7 +34,8 @@ class SecretsGuardTest {
     }
 
     private static AppProperties properties(String jwtSecret, String fileKey, boolean allowDev) {
-        return new AppProperties(new AppProperties.Storage("local", "./data", fileKey, null), null, null,
-                new AppProperties.Security(jwtSecret, Duration.ofHours(8), allowDev), null, null, null, null);
+        return new AppProperties(new AppProperties.Storage("local", "./data", fileKey, null, 100, 500_000_000),
+                null, null, new AppProperties.Security(jwtSecret, Duration.ofHours(8), allowDev),
+                null, null, null, null, null, null);
     }
 }

@@ -17,6 +17,7 @@ import com.claimpilot.audit.AuditAction;
 import com.claimpilot.audit.AuditService;
 import com.claimpilot.cache.ModelCache;
 import com.claimpilot.common.NotFoundException;
+import com.claimpilot.config.AppProperties;
 import com.claimpilot.conversation.ConversationRepository;
 import com.claimpilot.events.ProcessingDispatcher;
 import com.claimpilot.extraction.DocumentFactRepository;
@@ -40,12 +41,16 @@ public class DocumentService {
     private final ConversationRepository conversations;
     private final ModelCache modelCache;
     private final ApplicationEventPublisher events;
+    private final int maxFiles;
+    private final long maxBytes;
 
     public DocumentService(DocumentRepository repository, FileStorage storage, ProcessingDispatcher dispatcher,
                            AuditService audit,
                            VectorStore vectorStore, DocumentFactRepository facts,
                            ExtractionLogRepository extractionLogs, ConversationRepository conversations,
-                           ModelCache modelCache, ApplicationEventPublisher events) {
+                           ModelCache modelCache, ApplicationEventPublisher events, AppProperties properties) {
+        this.maxFiles = properties.storage().maxFilesPerUser();
+        this.maxBytes = properties.storage().maxBytesPerUser();
         this.modelCache = modelCache;
         this.events = events;
         this.repository = repository;
@@ -72,6 +77,8 @@ public class DocumentService {
             throw new IllegalArgumentException("Unsupported file type. Upload one of: "
                     + kind.extensions().stream().sorted().toList());
         }
+        checkQuota(repository.countByOwnerId(owner.getId()), repository.totalBytesOf(owner.getId()), file.getSize(),
+                maxFiles, maxBytes);
         String key;
         try (InputStream in = file.getInputStream()) {
             key = storage.store(fileName, in);
@@ -81,6 +88,18 @@ public class DocumentService {
         audit.record(owner.getId(), AuditAction.DOCUMENT_UPLOADED, kind.name(), saved.getId(), fileName);
         dispatcher.documentUploaded(saved.getId());
         return DocumentResponse.from(saved, List.of());
+    }
+
+    /** Each user has room for a fixed number of files and bytes, so one account cannot fill the disk. */
+    static void checkQuota(long files, long bytes, long newBytes, int maxFiles, long maxBytes) {
+        if (files >= maxFiles) {
+            throw new IllegalArgumentException("You have reached the limit of " + maxFiles
+                    + " files. Delete documents you no longer need, then try again.");
+        }
+        if (bytes + newBytes > maxBytes) {
+            throw new IllegalArgumentException("This upload would exceed your storage limit of "
+                    + (maxBytes / 1_000_000) + " MB. Delete documents you no longer need, then try again.");
+        }
     }
 
     public List<DocumentResponse> list(AppUser owner, DocumentKind kind) {

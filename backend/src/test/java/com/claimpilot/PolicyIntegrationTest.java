@@ -148,6 +148,18 @@ class PolicyIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void anAnswerRestingOnADiscretionaryClauseIsMarkedUnclear() throws Exception {
+        chatModel.nextAnswer = "STATUS: ANSWERED\nKinesiologist treatments may be considered when they are part "
+                + "of a rehabilitation program [1].";
+
+        String answer = ask(token, policyId, "What is the physiotherapist maximum per calendar year per person?",
+                null);
+
+        assertThat((String) JsonPath.read(answer, "$.status")).isEqualTo("UNCLEAR");
+        assertThat((Object) JsonPath.read(answer, "$.callKit")).isNotNull();
+    }
+
+    @Test
     void aRepeatedProcessingEventDoesNotDuplicateTheSearchChunks() throws Exception {
         int chunks = chunkCount();
         UUID id = UUID.fromString(policyId);

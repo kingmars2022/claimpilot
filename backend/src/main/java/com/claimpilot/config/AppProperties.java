@@ -9,14 +9,18 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties(prefix = "claimpilot")
 public record AppProperties(Storage storage, Indexing indexing, Retrieval retrieval, Security security,
-                            Conversation conversation, Ocr ocr, Events events, Cache cache) {
+                            Conversation conversation, Ocr ocr, Events events, Cache cache,
+                            Processing processing, Audit audit) {
 
     /**
      * @param type          "local" (a folder on disk) or "s3" (Amazon S3, or RustFS locally)
      * @param localRoot     folder for uploaded files when they are kept on the local disk
      * @param encryptionKey base64 AES-256 key; files are encrypted at rest when it is set
+     * @param maxFilesPerUser policies, receipts and forms one user may keep
+     * @param maxBytesPerUser total size of one user's files
      */
-    public record Storage(String type, String localRoot, String encryptionKey, S3 s3) {
+    public record Storage(String type, String localRoot, String encryptionKey, S3 s3, int maxFilesPerUser,
+                          long maxBytesPerUser) {
     }
 
     /**
@@ -26,6 +30,18 @@ public record AppProperties(Storage storage, Indexing indexing, Retrieval retrie
      */
     public record S3(String endpoint, String region, String bucket, String accessKey, String secretKey,
                      boolean pathStyle) {
+    }
+
+    /**
+     * @param maxConcurrent documents processed at the same time per server (OCR and model calls are heavy)
+     */
+    public record Processing(int maxConcurrent) {
+    }
+
+    /**
+     * @param retention how long activity log entries are kept
+     */
+    public record Audit(Duration retention) {
     }
 
     /**

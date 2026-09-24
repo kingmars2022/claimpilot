@@ -62,7 +62,9 @@ import com.claimpilot.cache.ModelCache;
         "spring.ai.model.embedding=none",
         "claimpilot.retrieval.similarity-threshold=0.1",
         "claimpilot.cache.model-requests-per-minute=100000",
-        "claimpilot.cache.login-attempts-per-minute=100000"
+        "claimpilot.cache.login-attempts-per-minute=100000",
+        "claimpilot.storage.max-files-per-user=100000",
+        "claimpilot.storage.max-bytes-per-user=100000000000"
 })
 @AutoConfigureMockMvc
 @Import(IntegrationTestBase.FakeModels.class)

@@ -17,10 +17,14 @@ public class AccountController {
         this.currentUser = currentUser;
     }
 
-    /** Deletes the account and every piece of data about it. The token stops working at once. */
+    /**
+     * Deletes the account and every piece of data about it. The token stops working at once. 204 when
+     * everything is gone; 202 when part of the clean-up was interrupted and finishes in the background.
+     */
     @DeleteMapping
     public ResponseEntity<Void> delete() {
-        accounts.deleteEverything(currentUser.get());
-        return ResponseEntity.noContent().build();
+        return accounts.deleteEverything(currentUser.get())
+                ? ResponseEntity.noContent().build()
+                : ResponseEntity.accepted().build();
     }
 }

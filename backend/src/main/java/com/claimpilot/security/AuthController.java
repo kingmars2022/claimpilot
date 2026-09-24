@@ -51,6 +51,7 @@ public class AuthController {
         throttle.signIn(request.username(), http.getRemoteAddr());
         // Same message for unknown user and wrong password, so usernames cannot be probed.
         AppUser user = users.findByUsername(request.username().strip())
+                .filter(u -> !u.isDeletionPending())
                 .filter(u -> passwordEncoder.matches(request.password(), u.getPasswordHash()))
                 .orElseThrow(() -> new BadCredentialsException("Invalid username or password."));
         audit.record(user.getId(), AuditAction.SIGNED_IN, null, null, null);

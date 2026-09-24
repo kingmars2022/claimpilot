@@ -60,3 +60,12 @@ jobs:
         run: docker build -t claimpilot-backend backend
       - name: Build frontend image
         run: docker build -t claimpilot-frontend frontend
+      - name: Check the frontend's security headers
+        run: |
+          docker run -d --name frontend -p 8088:80 --add-host backend:127.0.0.1 claimpilot-frontend
+          for i in $(seq 1 20); do curl -s -o /dev/null localhost:8088 && break; sleep 1; done
+          headers=$(curl -sI localhost:8088)
+          echo "$headers"
+          for h in Content-Security-Policy X-Content-Type-Options X-Frame-Options Referrer-Policy; do
+            echo "$headers" | grep -qi "^$h:" || { echo "Missing header $h"; exit 1; }
+          done

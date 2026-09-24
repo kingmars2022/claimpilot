@@ -29,6 +29,9 @@ public class AppUser {
     @Column(nullable = false)
     private Instant createdAt;
 
+    /** Set when the member asked for the account to be deleted; the account no longer works. */
+    private Instant deletionRequestedAt;
+
     protected AppUser() {
         // for JPA
     }
@@ -54,6 +57,16 @@ public class AppUser {
 
     public String getPasswordHash() {
         return passwordHash;
+    }
+
+    public boolean isDeletionPending() {
+        return deletionRequestedAt != null;
+    }
+
+    public void requestDeletion() {
+        if (deletionRequestedAt == null) {
+            deletionRequestedAt = Instant.now();
+        }
     }
 
     public Instant getCreatedAt() {

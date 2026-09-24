@@ -1,10 +1,16 @@
 package com.claimpilot.claim;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.client.ChatClient;
 
 import com.claimpilot.samples.SampleDocuments;
 
@@ -55,6 +61,21 @@ class FieldMappingServiceTest {
         assertThat(mapping.get("txtField_03")).isEqualTo(DataKey.CERTIFICATE_NUMBER);
         assertThat(mapping.get("txtField_11")).isEqualTo(DataKey.OTHER_CERTIFICATE_NUMBER);
         assertThat(FieldMappingService.PERSONAL_ATTESTATION.matcher("I certify that this is true").find()).isTrue();
+    }
+
+    @Test
+    void aFormVersionsMappingIsReadFromTheDatabaseOnlyOnce() {
+        FormFieldMappingRepository repository = mock(FormFieldMappingRepository.class);
+        when(repository.findByTemplateSha256(FORM.sha256())).thenReturn(List.of(
+                new FormFieldMapping(FORM.sha256(), "txtField_01", DataKey.MEMBER_NAME, "Plan member's full name")));
+        ChatClient.Builder builder = mock(ChatClient.Builder.class);
+        FieldMappingService service = new FieldMappingService(builder, repository);
+
+        service.mappingFor(FORM);
+        Map<String, DataKey> again = service.mappingFor(FORM);
+
+        assertThat(again.get("txtField_01")).isEqualTo(DataKey.MEMBER_NAME);
+        verify(repository, times(1)).findByTemplateSha256(FORM.sha256());
     }
 
     @Test

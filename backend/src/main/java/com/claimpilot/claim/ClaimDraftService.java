@@ -1,6 +1,7 @@
 package com.claimpilot.claim;
 
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +10,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -84,8 +86,13 @@ public class ClaimDraftService {
         return toDto(user, saved);
     }
 
-    public List<ClaimDtos.Draft> list(AppUser user) {
-        return drafts.findByOwnerIdOrderByUpdatedAtDesc(user.getId()).stream().map(d -> toDto(user, d)).toList();
+    /** Newest first, one page at a time; the form details are worked out once per form, not per claim. */
+    public List<ClaimDtos.Draft> list(AppUser user, int page, int size) {
+        Map<String, List<String>> leftForYouByForm = new HashMap<>();
+        return drafts.findByOwnerIdOrderByUpdatedAtDesc(user.getId(), PageRequest.of(page, size)).stream()
+                .map(d -> toDto(user, d, leftForYouByForm.computeIfAbsent(d.getFormKey(),
+                        key -> leftForYou(user, d))))
+                .toList();
     }
 
     public ClaimDtos.Draft get(AppUser user, UUID id) {
@@ -180,12 +187,16 @@ public class ClaimDraftService {
     }
 
     private ClaimDtos.Draft toDto(AppUser user, ClaimDraft draft) {
+        return toDto(user, draft, leftForYou(user, draft));
+    }
+
+    private ClaimDtos.Draft toDto(AppUser user, ClaimDraft draft, List<String> leftForYou) {
         return new ClaimDtos.Draft(draft.getId(), draft.getClaimType(), draft.getClaimType().label(),
                 ref(draft.getPolicyId()), ref(draft.getOtherPolicyId()), ref(draft.getReceiptId()),
                 new ClaimDtos.FormRef(draft.getFormKey(), forms.name(user, draft.getFormKey())),
                 draft.getRelationship(),
                 draft.getFields().stream().map(ClaimDtos.Field::from).toList(),
-                leftForYou(user, draft), draft.fullyReviewed(), draft.getCreatedAt(), draft.getUpdatedAt());
+                leftForYou, draft.fullyReviewed(), draft.getCreatedAt(), draft.getUpdatedAt());
     }
 
     private ClaimDtos.DocumentRef ref(UUID id) {

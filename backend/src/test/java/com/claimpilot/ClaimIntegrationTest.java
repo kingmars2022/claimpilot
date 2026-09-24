@@ -128,6 +128,20 @@ class ClaimIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void claimsAreListedNewestFirstOnePageAtATime() throws Exception {
+        String first = JsonPath.read(createDraft(), "$.id");
+        String second = JsonPath.read(createDraft(), "$.id");
+
+        String page = mvc.perform(as(token, get("/api/claims").param("size", "1")))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        assertThat((List<String>) JsonPath.read(page, "$[*].id")).containsExactly(second);
+        String next = mvc.perform(as(token, get("/api/claims").param("size", "1").param("page", "1")))
+                .andReturn().getResponse().getContentAsString();
+        assertThat((List<String>) JsonPath.read(next, "$[*].id")).containsExactly(first);
+    }
+
+    @Test
     void anotherUserCannotSeeOrUseTheseDocuments() throws Exception {
         String draftId = JsonPath.read(createDraft(), "$.id");
         String sam = login("sam");

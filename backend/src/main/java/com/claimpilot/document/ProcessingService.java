@@ -51,11 +51,13 @@ public class ProcessingService {
     private final DocumentFactRepository facts;
     private final TokenTextSplitter splitter;
     private final ApplicationEventPublisher events;
+    private final ProcessingSlots slots;
 
     public ProcessingService(DocumentRepository repository, FileStorage storage, DocumentReaderFactory readerFactory,
                              VectorStore vectorStore, FactExtractor factExtractor, DocumentFactRepository facts,
                              AppProperties properties, ApplicationEventPublisher events) {
         this.events = events;
+        this.slots = new ProcessingSlots(properties.processing().maxConcurrent());
         this.repository = repository;
         this.storage = storage;
         this.readerFactory = readerFactory;
@@ -79,6 +81,10 @@ public class ProcessingService {
      * background thread (inline mode) or by a Kafka worker.
      */
     public void process(UUID documentId) {
+        slots.run(() -> processNow(documentId));
+    }
+
+    private void processNow(UUID documentId) {
         UploadedDocument doc = repository.findById(documentId).orElse(null);
         if (doc == null) {
             log.warn("Document {} disappeared before processing", documentId);

@@ -53,9 +53,11 @@ public class ClaimController {
         return ResponseEntity.status(HttpStatus.CREATED).body(drafts.create(currentUser.get(), request));
     }
 
+    /** Newest first; {@code size} is at most 100. */
     @GetMapping
-    public List<ClaimDtos.Draft> list() {
-        return drafts.list(currentUser.get());
+    public List<ClaimDtos.Draft> list(@RequestParam(defaultValue = "0") int page,
+                                      @RequestParam(defaultValue = "50") int size) {
+        return drafts.list(currentUser.get(), Math.max(0, page), Math.clamp(size, 1, 100));
     }
 
     @GetMapping("/{id}")
