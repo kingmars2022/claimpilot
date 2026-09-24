@@ -19,6 +19,7 @@ import com.claimpilot.extraction.JsonReply;
  * the member actually has: unknown actions and out-of-range choices are dropped, a claim is always
  * preceded by its guide, and anything still ambiguous becomes a question back to the member.
  *
+ * @param relationship who received the care; null only when no claim is filled
  * @param clarify set when the plan cannot run without the member's answer
  */
 public record AssistantPlan(List<AssistantAction> actions, String question, UUID policyId, UUID otherPolicyId,
@@ -76,7 +77,8 @@ public record AssistantPlan(List<AssistantAction> actions, String question, UUID
                     + (receipt == null ? "" : String.valueOf(receipt.fact(FactKey.SERVICE_TYPE))));
         }
 
-        Relationship relationship = parseRelationship(JsonReply.text(root, "relationship"));
+        Relationship relationship = request.relationship() != null ? request.relationship()
+                : parseRelationship(JsonReply.text(root, "relationship"));
         if (relationship == null && policy != null) {
             relationship = inferRelationship(policy, context.profileName());
         }
@@ -97,11 +99,19 @@ public record AssistantPlan(List<AssistantAction> actions, String question, UUID
             clarify = new AssistantDtos.Clarify("What kind of care is the claim for?", "claimType",
                     java.util.Arrays.stream(ClaimType.values())
                             .map(t -> new AssistantDtos.Option(t.label(), t.name())).toList());
+        } else if (actions.contains(AssistantAction.FILL) && relationship == null) {
+            // The form asks who received the care; a wrong guess would put "Self" on a spouse's claim.
+            String member = memberOf(policy);
+            clarify = new AssistantDtos.Clarify("Who received the care?", "relationship",
+                    java.util.Arrays.stream(Relationship.values())
+                            .map(r -> new AssistantDtos.Option(r == Relationship.SELF
+                                    ? "The plan member (" + member + ")" : r.label(), r.name()))
+                            .toList());
         }
 
         return new AssistantPlan(List.copyOf(actions), question, policy == null ? null : policy.id(),
                 other == null ? null : other.id(), receipt == null ? null : receipt.id(), claimType,
-                relationship == null ? Relationship.SELF : relationship, clarify);
+                relationship, clarify);
     }
 
     /**
@@ -117,6 +127,11 @@ public record AssistantPlan(List<AssistantAction> actions, String question, UUID
         return others.stream()
                 .filter(p -> inferRelationship(p, context.profileName()) == Relationship.SELF)
                 .findFirst().orElse(null);
+    }
+
+    private static String memberOf(AssistantContext.Doc policy) {
+        String member = policy.fact(FactKey.PLAN_MEMBER_NAME);
+        return member == null ? "named on the policy" : member;
     }
 
     /** The model refers to documents by their number in the list it was shown (1-based). */

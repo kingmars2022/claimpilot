@@ -1,5 +1,6 @@
 package com.claimpilot.user;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import com.claimpilot.conversation.ConversationService;
@@ -18,9 +19,12 @@ public class AccountService {
     private final ConversationService conversations;
     private final ExtractionLogRepository extractionLogs;
     private final UserRepository users;
+    private final ApplicationEventPublisher events;
 
     public AccountService(DocumentService documents, ConversationService conversations,
-                          ExtractionLogRepository extractionLogs, UserRepository users) {
+                          ExtractionLogRepository extractionLogs, UserRepository users,
+                          ApplicationEventPublisher events) {
+        this.events = events;
         this.documents = documents;
         this.conversations = conversations;
         this.extractionLogs = extractionLogs;
@@ -32,5 +36,6 @@ public class AccountService {
         conversations.deleteAll(user.getUsername());
         extractionLogs.deleteByOwnerId(user.getId());
         users.delete(user);
+        events.publishEvent(new AccountDeleted(user.getId()));
     }
 }

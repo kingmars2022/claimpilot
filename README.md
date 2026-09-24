@@ -76,8 +76,12 @@ modules above in order, each with its own checks.
   Events) and a short message appears.
 - **Activity**: sign-ins, uploads, processing results, claims and downloads are logged, and shown to
   the user under Profile. Values from documents are never written to the log.
-- **Fair use**: requests that use the model are limited per user per minute (429 with Retry-After);
-  identical prompts are answered from a cache.
+- **Fair use**: requests that use the model are limited per user per minute, and sign-in attempts per
+  address and per username (429 with Retry-After); identical prompts to the same model are answered
+  from a cache.
+- **Safe defaults**: the development keys in this repository are refused when
+  `claimpilot.security.allow-dev-secrets` is false (the `aws` profile). With Kafka's at-least-once
+  delivery, processing the same upload twice changes nothing.
 
 ## Walkthrough
 
@@ -168,7 +172,8 @@ Shown at the top of this page. When the claim is started:
   actions and invented document numbers, always shows the claim rules before a form, fills in what it
   can work out itself (the plan that paid first is the one naming the member; the kind of care comes
   from the receipt; the relationship from the plan member's name), and asks the member when something
-  is still ambiguous. The model never calls a service directly.
+  is still ambiguous (which plan, which kind of care, who received the care). The model never calls a
+  service directly.
 
 ## Architecture
 
@@ -294,11 +299,13 @@ scoped to the signed-in user; another user's ids return 404.
 | `GET` | `/api/claims/{id}/pdf` | The filled PDF, once every field is checked. |
 | `GET` / `POST` / `DELETE` | `/api/forms`, `/api/forms/{id}` | Built-in claim forms and your uploaded fillable PDFs (`formKey` in `POST /api/claims`). |
 | `POST` | `/api/assistant` | `{ message, policyId?, claimType? }` → plan, steps (answer, guide, claim, question back), summary. |
-| `GET` | `/api/notifications`, `/api/notifications/stream` | Recent notifications; live stream (Server-Sent Events, token as `?access_token=`). |
+| `GET` | `/api/notifications` | Recent notifications. |
+| `POST` / `GET` | `/api/notifications/ticket`, `/api/notifications/stream?access_token=` | A one-minute ticket, then the live stream (Server-Sent Events). The ticket opens nothing else, and a session token is never accepted in a URL. |
 | `GET` | `/api/audit` | Your activity log, newest first. |
 
 Errors follow RFC 9457 (`application/problem+json`). Requests that use the model are limited per user
-(default 20 per minute) and answer `429` with `Retry-After` beyond that.
+(default 20 per minute), and sign-in and sign-up per client address and per username (default 10 per
+minute); beyond that the answer is `429` with `Retry-After`.
 
 ## Tests
 

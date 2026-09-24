@@ -11,9 +11,11 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import com.claimpilot.common.NotFoundException;
+import com.claimpilot.document.DocumentDeleted;
 import com.claimpilot.document.DocumentKind;
 import com.claimpilot.document.DocumentRepository;
 import com.claimpilot.document.DocumentStatus;
@@ -44,8 +46,8 @@ public class FormCatalog {
     private final Map<String, BuiltIn> builtIns = new LinkedHashMap<>();
     private final DocumentRepository documents;
     private final FileStorage storage;
-    /** Uploaded forms by storage key; a stored file never changes, so this never goes stale. */
-    private final Map<String, FormTemplate> uploaded = new ConcurrentHashMap<>();
+    /** Uploaded forms already read, by document id; dropped when the form is deleted. */
+    private final Map<UUID, FormTemplate> uploaded = new ConcurrentHashMap<>();
 
     public FormCatalog(DocumentRepository documents, FileStorage storage) {
         this.documents = documents;
@@ -81,7 +83,19 @@ public class FormCatalog {
         if (doc.getStatus() != DocumentStatus.READY) {
             throw new IllegalArgumentException(doc.getFileName() + " is not ready as a claim form.");
         }
-        return uploaded.computeIfAbsent(doc.getStorageKey(), storageKey -> read(doc));
+        return uploaded.computeIfAbsent(doc.getId(), id -> read(doc));
+    }
+
+    @EventListener
+    public void onDeleted(DocumentDeleted event) {
+        if (event.kind() == DocumentKind.FORM) {
+            uploaded.remove(event.documentId());
+        }
+    }
+
+    /** Whether an uploaded form is held in memory (checked by tests). */
+    public boolean isLoaded(UUID documentId) {
+        return uploaded.containsKey(documentId);
     }
 
     /** A short, human name for the form behind a key. */

@@ -3,6 +3,7 @@ package com.claimpilot.security;
 import java.time.Instant;
 import java.util.Locale;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -33,10 +34,12 @@ public class AuthController {
     private final TokenService tokens;
     private final CurrentUserService currentUser;
     private final AuditService audit;
+    private final LoginThrottle throttle;
 
     public AuthController(UserRepository users, PasswordEncoder passwordEncoder, TokenService tokens,
-                          CurrentUserService currentUser, AuditService audit) {
+                          CurrentUserService currentUser, AuditService audit, LoginThrottle throttle) {
         this.audit = audit;
+        this.throttle = throttle;
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.tokens = tokens;
@@ -44,7 +47,8 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public LoginResponse login(@Valid @RequestBody LoginRequest request) {
+    public LoginResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
+        throttle.signIn(request.username(), http.getRemoteAddr());
         // Same message for unknown user and wrong password, so usernames cannot be probed.
         AppUser user = users.findByUsername(request.username().strip())
                 .filter(u -> passwordEncoder.matches(request.password(), u.getPasswordHash()))
@@ -57,7 +61,8 @@ public class AuthController {
     /** Self-service sign-up, so anyone can try the demo with their own (fictional) documents. */
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public LoginResponse register(@Valid @RequestBody RegisterRequest request) {
+    public LoginResponse register(@Valid @RequestBody RegisterRequest request, HttpServletRequest http) {
+        throttle.signUp(http.getRemoteAddr());
         String username = request.username().strip().toLowerCase(Locale.ROOT);
         if (users.existsByUsername(username)) {
             throw new IllegalArgumentException("The username " + username + " is already taken.");

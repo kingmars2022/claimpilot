@@ -10,6 +10,7 @@ import com.claimpilot.chat.ChatAnswer;
 import com.claimpilot.claim.ClaimDtos;
 import com.claimpilot.claim.ClaimGuide;
 import com.claimpilot.claim.ClaimType;
+import com.claimpilot.claim.Relationship;
 
 /** Request and response bodies for the assistant. */
 public final class AssistantDtos {
@@ -21,8 +22,10 @@ public final class AssistantDtos {
      * @param message   what the member wrote, in any language
      * @param policyId  set when the member answered "which policy?"; overrides the plan
      * @param claimType set when the member answered "which kind of care?"; overrides the plan
+     * @param relationship set when the member answered "who received the care?"; overrides the plan
      */
-    public record Request(@NotBlank @Size(max = 2000) String message, UUID policyId, ClaimType claimType) {
+    public record Request(@NotBlank @Size(max = 2000) String message, UUID policyId, ClaimType claimType,
+                          Relationship relationship) {
     }
 
     public record Option(String label, String value) {

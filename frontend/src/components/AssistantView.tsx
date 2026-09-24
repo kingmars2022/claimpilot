@@ -12,9 +12,13 @@ const EXAMPLES = [
 
 const ACTION_LABELS = { ASK: 'Answer', GUIDE: 'Claim rules', FILL: 'Claim form' } as const;
 
+type Choice = { policyId?: string; claimType?: string; relationship?: string };
+
 interface Exchange {
   id: number;
   message: string;
+  /** Answers already given to the assistant's questions for this message. */
+  choice: Choice;
   reply: AssistantReply | null;
   error: string | null;
 }
@@ -28,11 +32,11 @@ export default function AssistantView({ onOpenClaim }: { onOpenClaim: (draftId: 
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
-  async function send(text: string, choice: { policyId?: string; claimType?: string } = {}) {
+  async function send(text: string, choice: Choice = {}) {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
     const id = Date.now();
-    setExchanges((list) => [...list, { id, message: trimmed, reply: null, error: null }]);
+    setExchanges((list) => [...list, { id, message: trimmed, choice, reply: null, error: null }]);
     setMessage('');
     setBusy(true);
     try {
@@ -80,7 +84,7 @@ export default function AssistantView({ onOpenClaim }: { onOpenClaim: (draftId: 
             {exchange.reply && (
               <ReplyView
                 reply={exchange.reply}
-                onChoose={(field, value) => void send(exchange.message, { [field]: value })}
+                onChoose={(field, value) => void send(exchange.message, { ...exchange.choice, [field]: value })}
                 onOpenClaim={onOpenClaim}
               />
             )}
@@ -115,7 +119,7 @@ function ReplyView({
   onOpenClaim,
 }: {
   reply: AssistantReply;
-  onChoose: (field: 'policyId' | 'claimType', value: string) => void;
+  onChoose: (field: 'policyId' | 'claimType' | 'relationship', value: string) => void;
   onOpenClaim: (draftId: string) => void;
 }) {
   return (
@@ -142,7 +146,7 @@ function StepView({
   onOpenClaim,
 }: {
   step: AssistantStep;
-  onChoose: (field: 'policyId' | 'claimType', value: string) => void;
+  onChoose: (field: 'policyId' | 'claimType' | 'relationship', value: string) => void;
   onOpenClaim: (draftId: string) => void;
 }) {
   if (step.type === 'CLARIFY' && step.clarify) {

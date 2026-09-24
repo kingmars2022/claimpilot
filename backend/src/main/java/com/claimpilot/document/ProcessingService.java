@@ -84,6 +84,11 @@ public class ProcessingService {
             log.warn("Document {} disappeared before processing", documentId);
             return;
         }
+        if (doc.getStatus() == DocumentStatus.READY) {
+            // Kafka delivers at least once: a repeated event for a finished upload is ignored.
+            log.info("Document {} is already processed; skipping the repeated event", documentId);
+            return;
+        }
         doc.markProcessing();
         repository.save(doc);
 
@@ -100,6 +105,8 @@ public class ProcessingService {
             }
             if (doc.getKind() == DocumentKind.POLICY) {
                 List<Document> chunks = toChunks(splitter.apply(read.units()), doc);
+                // A retry after a crash may find chunks from the interrupted attempt: replace them.
+                vectorStore.delete(new FilterExpressionBuilder().eq(META_DOCUMENT_ID, documentId.toString()).build());
                 vectorStore.add(chunks);
                 chunkCount = chunks.size();
             }

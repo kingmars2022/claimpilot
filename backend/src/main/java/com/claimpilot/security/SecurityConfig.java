@@ -9,7 +9,10 @@ import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -46,7 +49,15 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
-                        .requestMatchers("/api/**").authenticated()
+                        // The stream takes only a one-minute ticket; tickets are refused everywhere else.
+                        .requestMatchers(HttpMethod.GET, NOTIFICATION_STREAM).access((authentication, context) ->
+                                new AuthorizationDecision(TokenService.isStreamTicket(authentication.get())))
+                        .requestMatchers("/api/**").access((authentication, context) -> {
+                            Authentication user = authentication.get();
+                            return new AuthorizationDecision(user != null && user.isAuthenticated()
+                                    && !(user instanceof AnonymousAuthenticationToken)
+                                    && !TokenService.isStreamTicket(user));
+                        })
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))
                 .httpBasic(basic -> basic.disable())
@@ -57,7 +68,8 @@ public class SecurityConfig {
 
     /**
      * The token comes from the Authorization header, except on the notification stream: a browser
-     * EventSource cannot set headers, so there the token is read from {@code ?access_token=}.
+     * EventSource cannot set headers, so there a one-minute stream ticket is read from
+     * {@code ?access_token=}. A normal session token in a URL is never accepted.
      */
     @Bean
     BearerTokenResolver bearerTokenResolver() {

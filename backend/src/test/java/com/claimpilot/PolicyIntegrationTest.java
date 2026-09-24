@@ -7,11 +7,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 
+import com.claimpilot.document.DocumentRepository;
+import com.claimpilot.document.ProcessingService;
+import com.claimpilot.document.UploadedDocument;
 import com.claimpilot.samples.SampleDocuments;
 import com.claimpilot.support.IntegrationTestBase;
 import com.claimpilot.support.IntegrationTestBase.FakeChatModel.Kind;
@@ -21,6 +27,13 @@ class PolicyIntegrationTest extends IntegrationTestBase {
 
     private String token;
     private String policyId;
+
+    @Autowired
+    private ProcessingService processing;
+    @Autowired
+    private DocumentRepository documents;
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @BeforeEach
     void uploadSpousePolicy() throws Exception {
@@ -132,6 +145,26 @@ class PolicyIntegrationTest extends IntegrationTestBase {
         mvc.perform(as(token, delete("/api/policies/" + policyId))).andExpect(status().isNoContent());
 
         mvc.perform(as(token, get("/api/conversations/" + conversationId))).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void aRepeatedProcessingEventDoesNotDuplicateTheSearchChunks() throws Exception {
+        int chunks = chunkCount();
+        UUID id = UUID.fromString(policyId);
+
+        processing.process(id);  // Kafka redelivers an event for a finished upload
+        assertThat(chunkCount()).isEqualTo(chunks);
+
+        UploadedDocument doc = documents.findById(id).orElseThrow();
+        doc.markProcessing();  // a worker crashed halfway; the event comes back
+        documents.save(doc);
+        processing.process(id);
+        assertThat(chunkCount()).as("the interrupted attempt's chunks are replaced").isEqualTo(chunks);
+    }
+
+    private int chunkCount() {
+        return jdbc.queryForObject("SELECT count(*) FROM vector_store WHERE metadata::jsonb ->> 'documentId' = ?",
+                Integer.class, policyId);
     }
 
     private static Map<String, Object> fact(String documentJson, String key) {

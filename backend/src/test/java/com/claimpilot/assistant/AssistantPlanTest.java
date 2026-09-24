@@ -68,9 +68,26 @@ class AssistantPlanTest {
         AssistantContext noReceipt = new AssistantContext(List.of(OWN), List.of(), "Fiona Tremblay");
 
         AssistantPlan plan = AssistantPlan.from("{\"steps\": [\"GUIDE\"]}", noReceipt,
-                new AssistantDtos.Request("How do I make a claim?", null, null));
+                new AssistantDtos.Request("How do I make a claim?", null, null, null));
 
         assertThat(plan.clarify().field()).isEqualTo("claimType");
+    }
+
+    @Test
+    void whoReceivedTheCareIsAskedRatherThanGuessed() {
+        AssistantContext unknownMember = new AssistantContext(List.of(SPOUSE, OWN), List.of(RECEIPT), null);
+
+        AssistantPlan plan = plan("{\"steps\": [\"FILL\"], \"policy\": 1}", unknownMember);
+
+        assertThat(plan.relationship()).isNull();
+        assertThat(plan.clarify().field()).isEqualTo("relationship");
+        assertThat(plan.clarify().options()).extracting(AssistantDtos.Option::label)
+                .contains("The plan member (Marc Gagnon)", "Spouse");
+
+        AssistantPlan answered = AssistantPlan.from("{\"steps\": [\"FILL\"], \"policy\": 1}", unknownMember,
+                new AssistantDtos.Request("claim my physio", null, null, Relationship.SPOUSE));
+        assertThat(answered.clarify()).isNull();
+        assertThat(answered.relationship()).isEqualTo(Relationship.SPOUSE);
     }
 
     @Test
@@ -88,6 +105,6 @@ class AssistantPlanTest {
 
     private static AssistantPlan plan(String reply, AssistantContext context) {
         return AssistantPlan.from(reply, context,
-                new AssistantDtos.Request("My physio bill was $120, claim the rest on Marc's plan", null, null));
+                new AssistantDtos.Request("My physio bill was $120, claim the rest on Marc's plan", null, null, null));
     }
 }

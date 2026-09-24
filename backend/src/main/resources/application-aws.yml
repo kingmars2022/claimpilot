@@ -39,5 +39,6 @@ claimpilot:
       path-style: false
   security:
     jwt-secret: ${CLAIMPILOT_SECURITY_JWT_SECRET}
+    allow-dev-secrets: false
   ocr:
     languages: eng+fra                          # the Docker image installs both languages

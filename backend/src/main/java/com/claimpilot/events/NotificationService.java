@@ -11,11 +11,14 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import com.claimpilot.document.DocumentDeleted;
 import com.claimpilot.document.DocumentKind;
 import com.claimpilot.document.DocumentStatus;
+import com.claimpilot.user.AccountDeleted;
 
 /**
  * Pushes "your document is ready" to the user's open browser tabs over Server-Sent Events, and keeps
@@ -57,6 +60,27 @@ public class NotificationService {
                 : event.fileName() + " could not be read: " + event.errorMessage();
         publish(event.ownerId(), new Notification(ready ? "DOCUMENT_READY" : "DOCUMENT_FAILED", event.documentId(),
                 event.kind(), event.fileName(), message, event.at()));
+    }
+
+    /** The account is gone: close its streams and forget its notifications (they name its files). */
+    @EventListener
+    public void onAccountDeleted(AccountDeleted event) {
+        List<SseEmitter> open = streams.remove(event.userId());
+        if (open != null) {
+            open.forEach(SseEmitter::complete);
+        }
+        recent.remove(event.userId());
+    }
+
+    /** A deleted document no longer appears in the recent notifications. */
+    @EventListener
+    public void onDocumentDeleted(DocumentDeleted event) {
+        Deque<Notification> list = recent.get(event.ownerId());
+        if (list != null) {
+            synchronized (list) {
+                list.removeIf(n -> event.documentId().equals(n.documentId()));
+            }
+        }
     }
 
     public List<Notification> recent(Long userId) {

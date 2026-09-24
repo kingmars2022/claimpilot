@@ -18,9 +18,11 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.interactive.form.PDAcroForm;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 
+import com.claimpilot.claim.FormCatalog;
 import com.claimpilot.samples.SampleDocuments;
 import com.claimpilot.support.IntegrationTestBase;
 
@@ -28,6 +30,9 @@ import com.claimpilot.support.IntegrationTestBase;
 class FormIntegrationTest extends IntegrationTestBase {
 
     private String token;
+
+    @Autowired
+    private FormCatalog catalog;
 
     @BeforeEach
     void signIn() throws Exception {
@@ -78,6 +83,10 @@ class FormIntegrationTest extends IntegrationTestBase {
             assertThat(form.getField("f19").getValueAsString()).isEmpty();
             assertThat(form.getField("f20").getValueAsString()).isEmpty();
         }
+
+        assertThat(catalog.isLoaded(java.util.UUID.fromString(formId))).isTrue();
+        mvc.perform(as(token, delete("/api/forms/" + formId))).andExpect(status().isNoContent());
+        assertThat(catalog.isLoaded(java.util.UUID.fromString(formId))).as("dropped from memory").isFalse();
     }
 
     @Test

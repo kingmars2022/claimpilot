@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -38,13 +39,15 @@ public class DocumentService {
     private final ExtractionLogRepository extractionLogs;
     private final ConversationRepository conversations;
     private final ModelCache modelCache;
+    private final ApplicationEventPublisher events;
 
     public DocumentService(DocumentRepository repository, FileStorage storage, ProcessingDispatcher dispatcher,
                            AuditService audit,
                            VectorStore vectorStore, DocumentFactRepository facts,
                            ExtractionLogRepository extractionLogs, ConversationRepository conversations,
-                           ModelCache modelCache) {
+                           ModelCache modelCache, ApplicationEventPublisher events) {
         this.modelCache = modelCache;
+        this.events = events;
         this.repository = repository;
         this.storage = storage;
         this.dispatcher = dispatcher;
@@ -138,6 +141,7 @@ public class DocumentService {
             log.warn("Could not delete stored file {}", doc.getStorageKey(), ex);
         }
         repository.delete(doc);
+        events.publishEvent(new DocumentDeleted(doc.getId(), doc.getOwnerId(), doc.getKind()));
     }
 
     private static String label(DocumentKind kind) {

@@ -183,7 +183,11 @@ export interface AssistantStep {
   answer: ChatAnswer | null;
   guide: ClaimGuide | null;
   draft: ClaimDraft | null;
-  clarify: { question: string; field: 'policyId' | 'claimType' | null; options: { label: string; value: string }[] } | null;
+  clarify: {
+    question: string;
+    field: 'policyId' | 'claimType' | 'relationship' | null;
+    options: { label: string; value: string }[];
+  } | null;
   text: string | null;
 }
 
@@ -251,11 +255,6 @@ export function setToken(value: string | null) {
   } catch {
     // storage unavailable: the session lasts until the page is reloaded
   }
-}
-
-/** The live notification stream. EventSource cannot send headers, so the token goes in the URL. */
-export function notificationStreamUrl() {
-  return token ? `/api/notifications/stream?access_token=${encodeURIComponent(token)}` : null;
 }
 
 export function hasToken() {
@@ -355,10 +354,15 @@ export const api = {
     URL.revokeObjectURL(url);
   },
 
-  assistant: (message: string, choice: { policyId?: string; claimType?: string } = {}) =>
+  assistant: (message: string, choice: { policyId?: string; claimType?: string; relationship?: string } = {}) =>
     request<AssistantReply>('/api/assistant', json('POST', { message, ...choice })),
 
   notifications: () => request<AppNotification[]>('/api/notifications'),
+  /** EventSource cannot send headers: the stream is opened with a one-minute ticket in the URL. */
+  notificationStreamUrl: async () => {
+    const ticket = await request<{ value: string; expiresAt: string }>('/api/notifications/ticket', { method: 'POST' });
+    return `/api/notifications/stream?access_token=${encodeURIComponent(ticket.value)}`;
+  },
   activity: () => request<ActivityEntry[]>('/api/audit'),
 
   profile: () => request<Profile>('/api/profile'),

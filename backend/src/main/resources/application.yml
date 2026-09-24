@@ -78,6 +78,7 @@ claimpilot:
     type: memory             # memory | redis (docker compose --profile cache, then the "cache" Spring profile)
     ttl: 24h                 # a model reply is reused for the same prompt and user for this long
     model-requests-per-minute: 20
+    login-attempts-per-minute: 10   # per client address and per username
   indexing:
     chunk-size: 300          # tokens per chunk; Markdown is first split at headings
   retrieval:
@@ -92,6 +93,7 @@ claimpilot:
     # Development default only. Set CLAIMPILOT_SECURITY_JWT_SECRET (32+ characters) anywhere else.
     jwt-secret: ${CLAIMPILOT_SECURITY_JWT_SECRET:dev-only-secret-change-me-0123456789abcdef}
     token-ttl: 8h
+    allow-dev-secrets: true  # the "aws" profile sets false: the app then refuses the public development keys
 
 logging:
   level:

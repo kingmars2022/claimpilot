@@ -61,7 +61,8 @@ import com.claimpilot.cache.ModelCache;
         "spring.ai.model.chat=none",
         "spring.ai.model.embedding=none",
         "claimpilot.retrieval.similarity-threshold=0.1",
-        "claimpilot.cache.model-requests-per-minute=100000"
+        "claimpilot.cache.model-requests-per-minute=100000",
+        "claimpilot.cache.login-attempts-per-minute=100000"
 })
 @AutoConfigureMockMvc
 @Import(IntegrationTestBase.FakeModels.class)

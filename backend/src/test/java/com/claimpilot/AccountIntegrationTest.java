@@ -19,12 +19,16 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.http.MediaType;
 
+import com.claimpilot.events.NotificationService;
 import com.claimpilot.extraction.ExtractionLog;
 import com.claimpilot.samples.SampleDocuments;
 import com.claimpilot.support.IntegrationTestBase;
 
 /** Sign-in, sign-up, the profile, and deleting every piece of a user's data. */
 class AccountIntegrationTest extends IntegrationTestBase {
+
+    @Autowired
+    private NotificationService notifications;
 
     @Autowired
     MongoTemplate mongo;
@@ -75,8 +79,14 @@ class AccountIntegrationTest extends IntegrationTestBase {
         upload(token, "receipts", SampleDocuments.RECEIPT_PDF, SampleDocuments.receiptPdf());
         Query logsOfUser = Query.query(Criteria.where("ownerId").is(userId.longValue()));
         assertThat(mongo.count(logsOfUser, ExtractionLog.class)).isPositive();
+        for (int i = 0; i < 50 && notifications.recent(userId.longValue()).isEmpty(); i++) {
+            Thread.sleep(100);
+        }
+        assertThat(notifications.recent(userId.longValue())).as("the upload was notified").isNotEmpty();
 
         mvc.perform(as(token, delete("/api/account"))).andExpect(status().isNoContent());
+
+        assertThat(notifications.recent(userId.longValue())).as("notifications name the files").isEmpty();
 
         mvc.perform(as(token, get("/api/auth/me"))).andExpect(status().isUnauthorized());
         mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
@@ -86,13 +96,18 @@ class AccountIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    void notificationStreamAcceptsTheTokenInTheUrlButOtherEndpointsDoNot() throws Exception {
+    void theNotificationStreamOpensOnlyWithAOneMinuteTicket() throws Exception {
         String token = login("sam");
+        String ticket = JsonPath.read(mvc.perform(as(token, post("/api/notifications/ticket")))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.value");
 
-        mvc.perform(get("/api/notifications/stream").param("access_token", token))
+        mvc.perform(get("/api/notifications/stream").param("access_token", ticket))
                 .andExpect(status().isOk())
                 .andExpect(request().asyncStarted());
+        // A session token never goes in a URL, and a ticket opens nothing but the stream.
+        mvc.perform(get("/api/notifications/stream").param("access_token", token)).andExpect(status().isForbidden());
         mvc.perform(get("/api/notifications/stream")).andExpect(status().isUnauthorized());
+        mvc.perform(as(ticket, get("/api/policies"))).andExpect(status().isForbidden());
         mvc.perform(get("/api/policies").param("access_token", token)).andExpect(status().isUnauthorized());
     }
 

@@ -32,8 +32,9 @@ public record AppProperties(Storage storage, Indexing indexing, Retrieval retrie
      * @param type                   "memory" (one server) or "redis" (shared by every server)
      * @param ttl                    how long a model reply is reused for the same prompt
      * @param modelRequestsPerMinute per user: questions, assistant messages, guides, claims and uploads
+     * @param loginAttemptsPerMinute per client address and per username, for sign-in and sign-up
      */
-    public record Cache(String type, Duration ttl, int modelRequestsPerMinute) {
+    public record Cache(String type, Duration ttl, int modelRequestsPerMinute, int loginAttemptsPerMinute) {
 
         public boolean redis() {
             return "redis".equalsIgnoreCase(type);
@@ -69,8 +70,9 @@ public record AppProperties(Storage storage, Indexing indexing, Retrieval retrie
     /**
      * @param jwtSecret signing key for access tokens (HS256); at least 32 characters
      * @param tokenTtl  how long an access token stays valid
+     * @param allowDevSecrets false outside local development: the public development keys are refused
      */
-    public record Security(String jwtSecret, Duration tokenTtl) {
+    public record Security(String jwtSecret, Duration tokenTtl, boolean allowDevSecrets) {
     }
 
     /**

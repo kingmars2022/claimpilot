@@ -41,7 +41,8 @@ import com.claimpilot.samples.SampleDocuments;
  * Not part of the normal build; run with {@code ./mvnw test -Peval}. Writes target/eval-report.md.
  */
 @Tag("eval")
-@SpringBootTest(properties = "claimpilot.cache.model-requests-per-minute=100000")
+@SpringBootTest(properties = {"claimpilot.cache.model-requests-per-minute=100000",
+        "claimpilot.cache.login-attempts-per-minute=100000"})
 @AutoConfigureMockMvc
 class AccuracyEvaluationTest {
 
