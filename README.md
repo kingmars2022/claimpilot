@@ -59,7 +59,7 @@ flowchart LR
 
 ### Prerequisites
 
-- Java 21 and Maven
+- Java 21 (Maven is not needed: the backend ships with the Maven Wrapper, `./mvnw`)
 - Node.js 20 or later
 - Docker Desktop
 - [Ollama](https://ollama.com) installed natively (it uses the Apple GPU on macOS)
@@ -81,7 +81,7 @@ docker compose up -d
 
 ```bash
 cd backend
-mvn spring-boot:run
+./mvnw spring-boot:run
 ```
 
 The API starts on `http://localhost:8080`. Flyway creates the `documents` table and Spring AI
@@ -124,7 +124,7 @@ Errors follow RFC 9457 (`application/problem+json`).
 
 ```bash
 cd backend
-mvn test
+./mvnw test
 ```
 
 - Unit tests cover prompt building and citation parsing.
