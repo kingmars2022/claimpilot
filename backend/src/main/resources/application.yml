@@ -35,6 +35,8 @@ spring:
 companybrain:
   storage:
     local-root: ./data/uploads
+  indexing:
+    chunk-size: 300          # tokens per chunk; Markdown is first split at headings
   retrieval:
     top-k: 5
     similarity-threshold: 0.40

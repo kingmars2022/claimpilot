@@ -49,6 +49,10 @@ public class PromptBuilder {
             if (page != null) {
                 sb.append(", page ").append(page);
             }
+            Object section = source.getMetadata().get(IndexingService.META_SECTION);
+            if (section != null) {
+                sb.append(", section: ").append(section);
+            }
             sb.append(")\n").append(source.getText() == null ? "" : source.getText().strip()).append("\n\n");
         }
         sb.append("Question: ").append(question.strip());

@@ -28,6 +28,8 @@ know internal policies and may invent them. CompanyBrain uses retrieval-augmente
 ## Features (phase 1)
 
 - Upload PDF, Word, Markdown and text files; indexing runs in the background (`202 Accepted`).
+- Markdown and text files are split at their headings, then into chunks of about 300 tokens,
+  so every citation names its section (for example *Vacation* or *Client meals*).
 - PDF answers cite page numbers.
 - Prompt-injection guard: retrieved text is treated as reference material, never as instructions.
 - Deleting a document removes its vectors, its file and its database record.

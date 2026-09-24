@@ -75,18 +75,24 @@ public class ChatService {
                     String.valueOf(source.getMetadata().get(IndexingService.META_DOCUMENT_ID)),
                     String.valueOf(source.getMetadata().get(IndexingService.META_FILE_NAME)),
                     toInteger(source.getMetadata().get(IndexingService.META_PAGE)),
+                    toText(source.getMetadata().get(IndexingService.META_SECTION)),
                     snippet(source.getText()),
                     source.getScore()));
         }
         return citations;
     }
 
-    private static String snippet(String text) {
+    /** The passage as one line, without its Markdown heading (the section name is shown separately). */
+    static String snippet(String text) {
         if (text == null) {
             return "";
         }
-        String flat = text.strip().replaceAll("\\s+", " ");
+        String flat = text.replaceAll("(?m)^#{1,6}\\s+.*$", "").strip().replaceAll("\\s+", " ");
         return flat.length() <= SNIPPET_LENGTH ? flat : flat.substring(0, SNIPPET_LENGTH) + "…";
+    }
+
+    private static String toText(Object value) {
+        return value == null || value.toString().isBlank() ? null : value.toString();
     }
 
     private static Integer toInteger(Object value) {

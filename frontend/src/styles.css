@@ -337,10 +337,23 @@ h2 {
   min-width: 0;
 }
 
+.source-section {
+  font-size: 0.875rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
 .source-file {
   font-size: 0.875rem;
   font-weight: 500;
   overflow-wrap: anywhere;
+}
+
+/* With a section name above it, the file name becomes secondary. */
+.source-section + .source-file {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--muted);
 }
 
 .source-snippet {

@@ -8,6 +8,7 @@ public record Citation(
         String documentId,
         String fileName,
         Integer page,
+        String section,
         String snippet,
         Double score) {
 }

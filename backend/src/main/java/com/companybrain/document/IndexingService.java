@@ -14,6 +14,7 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import com.companybrain.config.AppProperties;
 import com.companybrain.storage.FileStorage;
 
 /**
@@ -27,6 +28,7 @@ public class IndexingService {
     public static final String META_FILE_NAME = "fileName";
     public static final String META_PAGE = "page";
     public static final String META_CHUNK_INDEX = "chunkIndex";
+    public static final String META_SECTION = MarkdownSections.META_SECTION;
 
     private static final String PDF_PAGE_KEY = "page_number";
     private static final Logger log = LoggerFactory.getLogger(IndexingService.class);
@@ -35,14 +37,19 @@ public class IndexingService {
     private final FileStorage storage;
     private final DocumentReaderFactory readerFactory;
     private final VectorStore vectorStore;
-    private final TokenTextSplitter splitter = TokenTextSplitter.builder().build();
+    private final TokenTextSplitter splitter;
 
     public IndexingService(DocumentRepository repository, FileStorage storage,
-                           DocumentReaderFactory readerFactory, VectorStore vectorStore) {
+                           DocumentReaderFactory readerFactory, VectorStore vectorStore,
+                           AppProperties properties) {
         this.repository = repository;
         this.storage = storage;
         this.readerFactory = readerFactory;
         this.vectorStore = vectorStore;
+        this.splitter = TokenTextSplitter.builder()
+                .withChunkSize(properties.indexing().chunkSize())
+                .withMinChunkSizeChars(100)
+                .build();
     }
 
     @Async
@@ -87,6 +94,10 @@ public class IndexingService {
             Object page = chunk.getMetadata().get(PDF_PAGE_KEY);
             if (page != null) {
                 metadata.put(META_PAGE, page);
+            }
+            Object section = chunk.getMetadata().get(META_SECTION);
+            if (section != null) {
+                metadata.put(META_SECTION, section);
             }
             result.add(new Document(text, metadata));
         }

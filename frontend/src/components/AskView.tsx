@@ -190,6 +190,7 @@ function SourceList({
           >
             <span className="source-index">{citation.index}</span>
             <span className="source-body">
+              {citation.section && <span className="source-section">{citation.section}</span>}
               <span className="source-file">
                 {citation.fileName}
                 {citation.page != null && <span className="muted">, page {citation.page}</span>}

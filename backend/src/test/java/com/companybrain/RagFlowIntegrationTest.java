@@ -41,6 +41,7 @@ import org.testcontainers.utility.DockerImageName;
 import com.companybrain.chat.ChatAnswer;
 import com.companybrain.chat.ChatRequest;
 import com.companybrain.chat.ChatService;
+import com.companybrain.chat.Citation;
 import com.companybrain.chat.PromptBuilder;
 import com.companybrain.document.DocumentResponse;
 import com.companybrain.document.DocumentService;
@@ -76,6 +77,9 @@ class RagFlowIntegrationTest {
             ## Vacation
             Full-time employees receive 15 paid vacation days in their first year of service.
             Vacation requests must be submitted in PeopleHub at least 10 business days in advance.
+
+            ## Sick days
+            Employees have 7 paid sick days per calendar year.
             """;
 
     @Autowired
@@ -95,15 +99,19 @@ class RagFlowIntegrationTest {
     @Test
     void answersFromUploadedDocumentWithCitation() throws Exception {
         DocumentResponse doc = upload("handbook.md", HANDBOOK);
-        assertThat(waitUntilIndexed(doc.id()).chunkCount()).isPositive();
+        // One chunk per Markdown section: "Vacation" and "Sick days".
+        assertThat(waitUntilIndexed(doc.id()).chunkCount()).isEqualTo(2);
 
         ChatAnswer answer = chatService.ask(new ChatRequest("How many vacation days do I get in my first year?"));
 
         assertThat(answer.grounded()).isTrue();
         assertThat(answer.answer()).contains("[1]");
         assertThat(answer.citations()).hasSize(1);
-        assertThat(answer.citations().getFirst().fileName()).isEqualTo("handbook.md");
-        assertThat(answer.citations().getFirst().snippet()).contains("15 paid vacation days");
+        Citation citation = answer.citations().getFirst();
+        assertThat(citation.fileName()).isEqualTo("handbook.md");
+        assertThat(citation.section()).isEqualTo("Vacation");
+        assertThat(citation.snippet()).startsWith("Full-time employees receive 15 paid vacation days");
+        assertThat(chatModel.prompts).singleElement().asString().contains("section: Vacation");
         // The retrieved passage was actually handed to the model.
         assertThat(chatModel.prompts).singleElement().asString().contains("15 paid vacation days");
 

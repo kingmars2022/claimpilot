@@ -16,6 +16,7 @@ export interface Citation {
   documentId: string;
   fileName: string;
   page: number | null;
+  section: string | null;
   snippet: string;
   score: number | null;
 }
