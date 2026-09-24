@@ -1219,6 +1219,19 @@ code {
     padding: 0.75rem 1rem;
   }
 
+  /* Five tabs do not fit a phone: the row scrolls sideways instead of widening the page. */
+  .tabs {
+    order: 3;
+    flex: 1 0 100%;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tab {
+    white-space: nowrap;
+  }
+
   .ask {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr) auto auto;
@@ -1485,8 +1498,6 @@ code {
 }
 
 .assistant-form {
-  position: sticky;
-  bottom: 0;
   display: flex;
   gap: 0.75rem;
   align-items: flex-end;

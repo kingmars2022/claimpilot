@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties(prefix = "claimpilot")
 public record AppProperties(Storage storage, Indexing indexing, Retrieval retrieval, Security security,
-                            Conversation conversation, Ocr ocr, Events events) {
+                            Conversation conversation, Ocr ocr, Events events, Cache cache) {
 
     /**
      * @param type          "local" (a folder on disk) or "s3" (Amazon S3, or RustFS locally)
@@ -26,6 +26,18 @@ public record AppProperties(Storage storage, Indexing indexing, Retrieval retrie
      */
     public record S3(String endpoint, String region, String bucket, String accessKey, String secretKey,
                      boolean pathStyle) {
+    }
+
+    /**
+     * @param type                   "memory" (one server) or "redis" (shared by every server)
+     * @param ttl                    how long a model reply is reused for the same prompt
+     * @param modelRequestsPerMinute per user: questions, assistant messages, guides, claims and uploads
+     */
+    public record Cache(String type, Duration ttl, int modelRequestsPerMinute) {
+
+        public boolean redis() {
+            return "redis".equalsIgnoreCase(type);
+        }
     }
 
     /**

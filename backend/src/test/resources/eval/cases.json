@@ -1,0 +1,37 @@
+{
+  "about": "Accuracy set for the fictional sample documents. Run against the real model with: ./mvnw test -Peval",
+  "questions": [
+    {"policy": "cedarview", "question": "How much does my plan pay for physiotherapy each year?", "status": "ANSWERED", "page": 2, "mustContain": ["600"]},
+    {"policy": "cedarview", "question": "Do I need a doctor's referral for massage therapy?", "status": "ANSWERED", "page": 2, "mustContain": ["referral"]},
+    {"policy": "cedarview", "question": "What percentage of chiropractic care is reimbursed?", "status": "ANSWERED", "page": 2, "mustContain": ["80"]},
+    {"policy": "cedarview", "question": "Is there a yearly maximum for chiropractors?", "status": "ANSWERED", "page": 2, "mustContain": ["500"]},
+    {"policy": "cedarview", "question": "How long do I have to submit a claim?", "status": "ANSWERED", "page": 3, "mustContain": ["12"]},
+    {"policy": "cedarview", "question": "What do I need to include with a claim for the balance my spouse's plan did not pay?", "status": "ANSWERED", "page": 3, "mustContain": ["Explanation of Benefits"]},
+    {"policy": "cedarview", "question": "Do I need a predetermination for a $900 dental treatment plan?", "status": "ANSWERED", "page": 2, "mustContain": ["predetermination"]},
+    {"policy": "cedarview", "question": "Which plan pays first for my spouse?", "status": "ANSWERED", "page": 3, "mustContain": ["first"]},
+    {"policy": "cedarview", "question": "Are kinesiologist treatments covered?", "status": "UNCLEAR", "page": 2, "mustContain": []},
+    {"policy": "cedarview", "question": "Is acupuncture covered?", "status": "NOT_IN_POLICY", "page": null, "mustContain": []},
+    {"policy": "cedarview", "question": "Does the plan cover laser eye surgery?", "status": "NOT_IN_POLICY", "page": null, "mustContain": []},
+    {"policy": "cedarview", "question": "Est-ce que la physiothérapie est couverte ?", "status": "ANSWERED", "page": 2, "mustContain": ["600"]},
+    {"policy": "cedarview", "question": "按摩治疗需要医生转介吗？", "status": "ANSWERED", "page": 2, "mustContain": []},
+    {"policy": "harbourline", "question": "How much is reimbursed for physiotherapy?", "status": "ANSWERED", "page": 2, "mustContain": ["70", "500"]},
+    {"policy": "harbourline", "question": "What is the massage therapy maximum?", "status": "ANSWERED", "page": 2, "mustContain": ["300"]},
+    {"policy": "harbourline", "question": "Does my plan cover dental care?", "status": "NOT_IN_POLICY", "page": null, "mustContain": []},
+    {"policy": "harbourline", "question": "Quel est le délai pour soumettre une réclamation ?", "status": "ANSWERED", "page": 2, "mustContain": ["12"]}
+  ],
+  "facts": [
+    {"document": "cedarview", "key": "POLICY_NUMBER", "value": "CV-88213-02"},
+    {"document": "cedarview", "key": "CERTIFICATE_NUMBER", "value": "55190336"},
+    {"document": "cedarview", "key": "PLAN_MEMBER_NAME", "value": "Marc Gagnon"},
+    {"document": "cedarview", "key": "INSURER_PHONE", "value": "1-800-555-0199"},
+    {"document": "cedarview", "key": "PLAN_SPONSOR", "value": "Rive-Nord Logistics Ltd."},
+    {"document": "harbourline", "key": "POLICY_NUMBER", "value": "HL-204518"},
+    {"document": "harbourline", "key": "CERTIFICATE_NUMBER", "value": "7730142"},
+    {"document": "harbourline", "key": "PLAN_MEMBER_NAME", "value": "Fiona Tremblay"},
+    {"document": "harbourline", "key": "INSURER_PHONE", "value": "1-888-555-0123"},
+    {"document": "receipt", "key": "SERVICE_DATE", "value": "2026-03-05"},
+    {"document": "receipt", "key": "AMOUNT_CHARGED", "value": "120.00"},
+    {"document": "receipt", "key": "AMOUNT_PAID_BY_OTHER_PLAN", "value": "84.00"},
+    {"document": "receipt", "key": "RECEIPT_NUMBER", "value": "R-2026-0318"}
+  ]
+}

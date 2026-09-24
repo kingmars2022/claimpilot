@@ -14,6 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.claimpilot.audit.AuditAction;
 import com.claimpilot.audit.AuditService;
+import com.claimpilot.cache.ModelCache;
 import com.claimpilot.common.NotFoundException;
 import com.claimpilot.conversation.ConversationRepository;
 import com.claimpilot.events.ProcessingDispatcher;
@@ -36,11 +37,14 @@ public class DocumentService {
     private final DocumentFactRepository facts;
     private final ExtractionLogRepository extractionLogs;
     private final ConversationRepository conversations;
+    private final ModelCache modelCache;
 
     public DocumentService(DocumentRepository repository, FileStorage storage, ProcessingDispatcher dispatcher,
                            AuditService audit,
                            VectorStore vectorStore, DocumentFactRepository facts,
-                           ExtractionLogRepository extractionLogs, ConversationRepository conversations) {
+                           ExtractionLogRepository extractionLogs, ConversationRepository conversations,
+                           ModelCache modelCache) {
+        this.modelCache = modelCache;
         this.repository = repository;
         this.storage = storage;
         this.dispatcher = dispatcher;
@@ -110,12 +114,14 @@ public class DocumentService {
         remove(doc);
         audit.record(owner.getId(), AuditAction.DOCUMENT_DELETED, kind.name(), id, doc.getFileName());
         if (kind == DocumentKind.POLICY) {
+            modelCache.evictOwner(owner.getId());  // cached replies may quote this policy
             conversations.deleteByOwnerAndPolicyId(owner.getUsername(), id);
         }
     }
 
     /** Removes every file of this user (used when the account is deleted). */
     public void deleteAll(AppUser owner) {
+        modelCache.evictOwner(owner.getId());
         repository.findByOwnerId(owner.getId()).forEach(this::remove);
         vectorStore.delete(OwnerScope.owner(owner.getId()));
     }

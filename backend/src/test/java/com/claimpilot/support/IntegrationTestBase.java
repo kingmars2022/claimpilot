@@ -47,6 +47,9 @@ import org.testcontainers.mongodb.MongoDBContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import com.claimpilot.cache.MemoryModelCache;
+import com.claimpilot.cache.ModelCache;
+
 /**
  * Boots the whole application over HTTP (MockMvc) against real pgvector and MongoDB containers.
  * The AI models are replaced by fakes, so the tests need Docker but not Ollama.
@@ -57,7 +60,8 @@ import org.testcontainers.utility.DockerImageName;
 @SpringBootTest(properties = {
         "spring.ai.model.chat=none",
         "spring.ai.model.embedding=none",
-        "claimpilot.retrieval.similarity-threshold=0.1"
+        "claimpilot.retrieval.similarity-threshold=0.1",
+        "claimpilot.cache.model-requests-per-minute=100000"
 })
 @AutoConfigureMockMvc
 @Import(IntegrationTestBase.FakeModels.class)
@@ -95,9 +99,16 @@ public abstract class IntegrationTestBase {
     @Autowired
     protected FakeChatModel chatModel;
 
+    @Autowired
+    private ModelCache modelCache;
+
+    /** Each test sees the model as if for the first time: fake replies reset, cached replies dropped. */
     @BeforeEach
     void resetChatModel() {
         chatModel.reset();
+        if (modelCache instanceof MemoryModelCache memory) {
+            memory.clear();
+        }
     }
 
     // ---------- HTTP helpers ----------

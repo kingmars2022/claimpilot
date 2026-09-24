@@ -68,7 +68,46 @@ services:
     volumes:
       - s3data:/data
 
+  # Phase 5, started with: docker compose --profile cache up -d
+  redis:
+    image: redis:7.4-alpine
+    container_name: claimpilot-redis
+    profiles: ["cache"]
+    ports:
+      - "6379:6379"
+
+  # The whole app in Docker, started with: docker compose --profile app up -d --build
+  # Then open http://localhost:3000. Ollama keeps running natively on the Mac (Apple GPU).
+  backend:
+    build: ./backend
+    container_name: claimpilot-backend
+    profiles: ["app"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/claimpilot
+      SPRING_MONGODB_URI: mongodb://mongo:27017/claimpilot
+      SPRING_AI_OLLAMA_BASE_URL: http://host.docker.internal:11434
+      CLAIMPILOT_STORAGE_LOCAL_ROOT: /app/data/uploads
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - uploads:/app/data/uploads
+
+  frontend:
+    build: ./frontend
+    container_name: claimpilot-frontend
+    profiles: ["app"]
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
 volumes:
+  uploads:
   pgdata:
   mongodata:
   s3data:

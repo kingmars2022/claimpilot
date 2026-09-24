@@ -6,15 +6,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
 
+import com.claimpilot.cache.CachedModel;
 import com.claimpilot.config.AppProperties;
 import com.claimpilot.document.DocumentKind;
 import com.claimpilot.document.DocumentService;
@@ -37,20 +36,18 @@ public class ClaimGuideService {
     private static final int MAX_CLAUSES = 10;
     private static final int CLAUSE_LENGTH = 280;
 
-    private final ChatClient chatClient;
+    /**
+     * A policy's text never changes after upload, so the same clauses give the same prompt and the
+     * model reply is reused from the cache (in memory, or Redis). Ownership is checked first.
+     */
+    private final CachedModel model;
     private final VectorStore vectorStore;
     private final DocumentService documents;
     private final double similarityThreshold;
 
-    /**
-     * A policy's text never changes after upload, so a guide can be reused. Keyed by owner, policy
-     * and type; ownership is checked before the cache is read. (Moves to Redis in phase 5.)
-     */
-    private final Map<String, ClaimGuide> cache = new ConcurrentHashMap<>();
-
-    public ClaimGuideService(ChatClient.Builder builder, VectorStore vectorStore, DocumentService documents,
+    public ClaimGuideService(CachedModel model, VectorStore vectorStore, DocumentService documents,
                              AppProperties properties) {
-        this.chatClient = builder.build();
+        this.model = model;
         this.vectorStore = vectorStore;
         this.documents = documents;
         this.similarityThreshold = properties.retrieval().similarityThreshold();
@@ -61,16 +58,7 @@ public class ClaimGuideService {
         if (policy.getStatus() != DocumentStatus.READY) {
             throw new IllegalArgumentException("This policy is still being processed. Try again in a moment.");
         }
-        String key = user.getId() + ":" + policyId + ":" + type;
-        ClaimGuide cached = cache.get(key);
-        if (cached != null) {
-            return cached;
-        }
-        ClaimGuide guide = build(user, policyId, type);
-        if (guide.found()) {
-            cache.put(key, guide);
-        }
-        return guide;
+        return build(user, policyId, type);
     }
 
     private ClaimGuide build(AppUser user, UUID policyId, ClaimType type) {
@@ -79,11 +67,7 @@ public class ClaimGuideService {
             return new ClaimGuide(policyId, type, type.label(), List.of(), List.of(), List.of(), List.of(),
                     new ClaimGuide.PreApproval(ClaimGuide.Requirement.UNKNOWN, null), false);
         }
-        String reply = chatClient.prompt()
-                .system(systemPrompt())
-                .user(userPrompt(type, clauses))
-                .call()
-                .content();
+        String reply = model.complete(user.getId(), systemPrompt(), userPrompt(type, clauses));
         return parse(reply, policyId, type, clauses);
     }
 

@@ -127,7 +127,7 @@ function ReplyView({
           ))}
         </ol>
       )}
-      <p className="summary">{reply.summary}</p>
+      {reply.steps[0]?.type !== 'CLARIFY' && <p className="summary">{reply.summary}</p>}
       {reply.steps.map((step, index) => (
         <StepView key={index} step={step} onChoose={onChoose} onOpenClaim={onOpenClaim} />
       ))}

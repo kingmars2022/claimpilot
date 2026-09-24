@@ -21,6 +21,8 @@
         <java.version>21</java.version>
         <spring-ai.version>2.0.1</spring-ai.version>
         <aws-sdk.version>2.34.0</aws-sdk.version>
+        <surefire.groups></surefire.groups>
+        <surefire.excludedGroups>eval</surefire.excludedGroups>
     </properties>
 
     <dependencyManagement>
@@ -93,6 +95,15 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-ollama</artifactId>
         </dependency>
+        <!-- Phase 5: Amazon Bedrock in the cloud (the "aws" profile); Ollama stays the default -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-bedrock-converse</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-bedrock</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-vector-store-pgvector</artifactId>
@@ -114,6 +125,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-kafka</artifactId>
+        </dependency>
+
+        <!-- Phase 5: shared cache and rate limits (in memory by default, Redis with the "cache" profile) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
         <dependency>
@@ -160,6 +177,26 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- The accuracy evaluation needs the real models; see the "eval" profile. -->
+                    <excludedGroups>${surefire.excludedGroups}</excludedGroups>
+                    <groups>${surefire.groups}</groups>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- ./mvnw test -Peval : accuracy report against Ollama, written to target/eval-report.md -->
+        <profile>
+            <id>eval</id>
+            <properties>
+                <surefire.groups>eval</surefire.groups>
+                <surefire.excludedGroups></surefire.excludedGroups>
+            </properties>
+        </profile>
+    </profiles>
 </project>
