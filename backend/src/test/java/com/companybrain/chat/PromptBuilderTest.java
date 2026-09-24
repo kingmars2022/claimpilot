@@ -23,7 +23,8 @@ class PromptBuilderTest {
         assertThat(prompt)
                 .contains("[1] (file: handbook.pdf, page 4)")
                 .contains("[2] (file: expenses.md)")
-                .endsWith("Question: How many days?");
+                .contains("Question: How many days?")
+                .endsWith(PromptBuilder.ANSWER_LANGUAGE_REMINDER);
     }
 
     @Test
