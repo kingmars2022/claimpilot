@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: companybrain
+  threads:
+    virtual:
+      enabled: true          # @Async indexing jobs run on virtual threads
+  datasource:
+    url: jdbc:postgresql://localhost:5432/companybrain
+    username: companybrain
+    password: companybrain
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none         # schema is owned by Flyway
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
+  ai:
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        model: qwen3:8b
+        temperature: 0.2
+        think: false         # answer directly, no reasoning trace
+      embedding:
+        model: bge-m3        # 1024-dim embeddings; also multilingual if other languages are added later
+    vectorstore:
+      pgvector:
+        initialize-schema: true
+        dimensions: 1024     # bge-m3 output size
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+
+companybrain:
+  storage:
+    local-root: ./data/uploads
+  retrieval:
+    top-k: 5
+    similarity-threshold: 0.40
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

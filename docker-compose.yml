@@ -1,0 +1,25 @@
+# Local infrastructure. Ollama runs natively on macOS (not in Docker) so it can use the Apple GPU.
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: companybrain-postgres
+    environment:
+      POSTGRES_DB: companybrain
+      POSTGRES_USER: companybrain
+      POSTGRES_PASSWORD: companybrain
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U companybrain -d companybrain"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Added in later phases (started with --profile when needed):
+  # redis    (phase 5, profile "cache")
+  # kafka    (phase 3, profile "events")
+
+volumes:
+  pgdata:
