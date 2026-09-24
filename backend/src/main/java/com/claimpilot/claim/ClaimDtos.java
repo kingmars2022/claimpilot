@@ -20,13 +20,18 @@ public final class ClaimDtos {
      * @param policyId      the plan being claimed on (for a second-plan claim, usually the spouse's)
      * @param otherPolicyId the plan that paid first, if any
      * @param receiptId     the receipt for the care
+     * @param formKey       the form to fill (see {@link FormCatalog}); the default Cedarview form if empty
      */
     public record CreateDraft(
             @NotNull ClaimType claimType,
             @NotNull UUID policyId,
             UUID otherPolicyId,
             UUID receiptId,
-            @NotNull Relationship relationship) {
+            @NotNull Relationship relationship,
+            @Size(max = 100) String formKey) {
+    }
+
+    public record FormRef(String key, String name) {
     }
 
     /** Either a corrected value, a review tick, or both. */
@@ -63,6 +68,7 @@ public final class ClaimDtos {
             DocumentRef policy,
             DocumentRef otherPolicy,
             DocumentRef receipt,
+            FormRef form,
             Relationship relationship,
             List<Field> fields,
             List<String> leftForYou,

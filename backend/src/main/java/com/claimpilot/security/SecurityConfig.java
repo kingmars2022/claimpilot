@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -18,6 +19,8 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
 
 import com.claimpilot.config.AppProperties;
@@ -31,6 +34,7 @@ import com.claimpilot.config.AppProperties;
 public class SecurityConfig {
 
     private static final int MIN_SECRET_BYTES = 32;  // HS256 needs a 256-bit key
+    private static final String NOTIFICATION_STREAM = "/api/notifications/stream";
 
     @Bean
     SecurityFilterChain api(HttpSecurity http) throws Exception {
@@ -38,6 +42,8 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // Follow-up dispatches of an already authorized request (streaming, errors).
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/api/**").authenticated()
@@ -47,6 +53,19 @@ public class SecurityConfig {
                 .formLogin(form -> form.disable())
                 .exceptionHandling(Customizer.withDefaults());
         return http.build();
+    }
+
+    /**
+     * The token comes from the Authorization header, except on the notification stream: a browser
+     * EventSource cannot set headers, so there the token is read from {@code ?access_token=}.
+     */
+    @Bean
+    BearerTokenResolver bearerTokenResolver() {
+        DefaultBearerTokenResolver header = new DefaultBearerTokenResolver();
+        DefaultBearerTokenResolver query = new DefaultBearerTokenResolver();
+        query.setAllowUriQueryParameter(true);
+        return request -> NOTIFICATION_STREAM.equals(request.getRequestURI()) ? query.resolve(request)
+                : header.resolve(request);
     }
 
     @Bean

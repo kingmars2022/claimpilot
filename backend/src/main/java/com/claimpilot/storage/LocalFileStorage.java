@@ -6,20 +6,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
 
-import com.claimpilot.config.AppProperties;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
-import org.springframework.stereotype.Component;
 
-@Component
+/** Files on the local disk, under {@code claimpilot.storage.local-root}. */
 public class LocalFileStorage implements FileStorage {
 
     private static final int MAX_NAME_LENGTH = 150;
 
     private final Path root;
 
-    public LocalFileStorage(AppProperties properties) {
-        this.root = Path.of(properties.storage().localRoot()).toAbsolutePath().normalize();
+    public LocalFileStorage(String root) {
+        this.root = Path.of(root).toAbsolutePath().normalize();
     }
 
     @Override
@@ -53,6 +51,11 @@ public class LocalFileStorage implements FileStorage {
             throw new IllegalArgumentException("Invalid storage key");
         }
         return path;
+    }
+
+    @Override
+    public String toString() {
+        return "folder " + root;
     }
 
     /** Keeps letters in any script (é, 中) and digits; replaces everything else. */

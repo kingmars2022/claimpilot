@@ -20,11 +20,27 @@ spring:
     mongodb:
       auto-index-creation: true
       uuid-representation: standard
+    redis:
+      host: localhost
+      port: 6379
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      auto-offset-reset: earliest   # a worker that starts late still processes waiting uploads
   servlet:
     multipart:
       max-file-size: 20MB
       max-request-size: 20MB
   ai:
+    retry:
+      max-attempts: 3        # fail in seconds, not minutes, when the model is not running
+      backoff:
+        initial-interval: 1s
+        multiplier: 2
+        max-interval: 5s
+    model:
+      chat: ollama           # ollama locally; bedrock-converse with the "aws" profile
+      embedding: ollama      # ollama locally; bedrock-titan with the "aws" profile
     ollama:
       base-url: http://localhost:11434
       chat:
@@ -42,7 +58,26 @@ spring:
 
 claimpilot:
   storage:
+    type: local              # local | s3 (RustFS locally, Amazon S3 in the cloud)
     local-root: ./data/uploads
+    # AES-256 key (base64, 32 bytes) for encrypting uploads at rest. Development default only:
+    # set CLAIMPILOT_STORAGE_ENCRYPTION_KEY anywhere else (openssl rand -base64 32).
+    encryption-key: ${CLAIMPILOT_STORAGE_ENCRYPTION_KEY:ZGV2LW9ubHktZmlsZS1rZXktY2hhbmdlLW1lLTAxMjM=}
+    s3:
+      endpoint: http://localhost:9000   # RustFS; leave empty for Amazon S3
+      region: ca-central-1
+      bucket: claimpilot-uploads
+      access-key: ${CLAIMPILOT_S3_ACCESS_KEY:claimpilot}
+      secret-key: ${CLAIMPILOT_S3_SECRET_KEY:claimpilot-secret}
+      path-style: true
+  events:
+    mode: inline             # inline | kafka (docker compose --profile events, then the "events" Spring profile)
+    uploaded-topic: claimpilot.documents.uploaded
+    processed-topic: claimpilot.documents.processed
+  cache:
+    type: memory             # memory | redis (docker compose --profile cache, then the "cache" Spring profile)
+    ttl: 24h                 # a model reply is reused for the same prompt and user for this long
+    model-requests-per-minute: 20
   indexing:
     chunk-size: 300          # tokens per chunk; Markdown is first split at headings
   retrieval:
@@ -58,7 +93,14 @@ claimpilot:
     jwt-secret: ${CLAIMPILOT_SECURITY_JWT_SECRET:dev-only-secret-change-me-0123456789abcdef}
     token-ttl: 8h
 
+logging:
+  level:
+    org.apache.kafka: warn   # Kafka clients print their whole configuration at info level
+
 management:
+  health:
+    redis:
+      enabled: false         # Redis is optional; the "cache" profile turns its health check on
   endpoints:
     web:
       exposure:

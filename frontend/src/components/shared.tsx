@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
-import { api, FACT_LABELS, type DocumentKind, type Fact, type UploadedDocument } from '../api';
+import { api, FACT_LABELS, type DocumentKind, type Fact, type FormOption, type UploadedDocument } from '../api';
 
 const POLL_MS = 2000;
 const LOCALE = 'en-CA';
@@ -16,6 +16,18 @@ export const STATUS_LABELS: Record<UploadedDocument['status'], string> = {
   READY: 'Ready',
   FAILED: 'Failed',
 };
+
+/** Name of the window event fired when the server says a document finished processing. */
+export const DOCUMENT_EVENT = 'claimpilot:document';
+
+/** Calls refresh as soon as a notification says a document is ready (polling stays as a fallback). */
+function useDocumentEvents(refresh: () => Promise<void>) {
+  useEffect(() => {
+    const listener = () => void refresh();
+    window.addEventListener(DOCUMENT_EVENT, listener);
+    return () => window.removeEventListener(DOCUMENT_EVENT, listener);
+  }, [refresh]);
+}
 
 /** The user's policies or receipts, refreshed every 2 s while any is still being read. */
 export function useDocuments(kind: DocumentKind) {
@@ -37,6 +49,7 @@ export function useDocuments(kind: DocumentKind) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+  useDocumentEvents(refresh);
 
   const busy = documents.some((d) => d.status === 'UPLOADED' || d.status === 'PROCESSING');
   useEffect(() => {
@@ -46,6 +59,35 @@ export function useDocuments(kind: DocumentKind) {
   }, [busy, refresh]);
 
   return { documents, ready: documents.filter((d) => d.status === 'READY'), loaded, error, refresh };
+}
+
+/** Claim forms: the built-in ones and the user's uploads, refreshed while an upload is being read. */
+export function useForms() {
+  const [forms, setForms] = useState<FormOption[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      setForms(await api.forms());
+      setError(null);
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+  useDocumentEvents(refresh);
+
+  const busy = forms.some((f) => f.status === 'UPLOADED' || f.status === 'PROCESSING');
+  useEffect(() => {
+    if (!busy) return;
+    const timer = setInterval(() => void refresh(), POLL_MS);
+    return () => clearInterval(timer);
+  }, [busy, refresh]);
+
+  return { forms, error, refresh };
 }
 
 interface DropzoneProps {

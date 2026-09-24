@@ -8,12 +8,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 
+import com.claimpilot.cache.CachedModel;
 import com.claimpilot.config.AppProperties;
 import com.claimpilot.conversation.ChatMessage;
 import com.claimpilot.conversation.Conversation;
@@ -37,7 +37,7 @@ public class ChatService {
     private static final int SNIPPET_LENGTH = 320;
     private static final int UNCLEAR_CLAUSES = 3;
 
-    private final ChatClient chatClient;
+    private final CachedModel model;
     private final VectorStore vectorStore;
     private final PromptBuilder promptBuilder;
     private final ConversationService conversations;
@@ -46,10 +46,10 @@ public class ChatService {
     private final AppProperties.Retrieval retrieval;
     private final int historyTurns;
 
-    public ChatService(ChatClient.Builder chatClientBuilder, VectorStore vectorStore, PromptBuilder promptBuilder,
+    public ChatService(CachedModel model, VectorStore vectorStore, PromptBuilder promptBuilder,
                        ConversationService conversations, DocumentService documents, CallKitBuilder callKits,
                        AppProperties properties) {
-        this.chatClient = chatClientBuilder.build();
+        this.model = model;
         this.vectorStore = vectorStore;
         this.promptBuilder = promptBuilder;
         this.conversations = conversations;
@@ -84,11 +84,9 @@ public class ChatService {
             answer = language.notInPolicyMessage();
             citations = List.of();
         } else {
-            PromptBuilder.ParsedReply reply = PromptBuilder.parse(chatClient.prompt()
-                    .system(promptBuilder.systemPrompt(language))
-                    .user(promptBuilder.userPrompt(question, sources, history, language))
-                    .call()
-                    .content());
+            PromptBuilder.ParsedReply reply = PromptBuilder.parse(model.complete(user.getId(),
+                    promptBuilder.systemPrompt(language),
+                    promptBuilder.userPrompt(question, sources, history, language)));
             citations = citationsUsed(reply.text(), sources);
             status = reply.status().orElse(citations.isEmpty() ? AnswerStatus.UNCLEAR : AnswerStatus.ANSWERED);
             answer = reply.text();
@@ -106,7 +104,7 @@ public class ChatService {
         }
 
         CallKit callKit = status == AnswerStatus.ANSWERED ? null
-                : callKits.build(policyId, englishQuestion(question, language));
+                : callKits.build(policyId, englishQuestion(user, question, language));
         conversation.append(ChatMessage.question(question),
                 ChatMessage.answer(answer, status, citations, callKit));
         Conversation saved = conversations.save(conversation);
@@ -115,13 +113,13 @@ public class ChatService {
     }
 
     /** The call script is read to an English-speaking agent, so a French or Chinese question is translated. */
-    private String englishQuestion(String question, AnswerLanguage language) {
+    private String englishQuestion(AppUser user, String question, AnswerLanguage language) {
         if (language == AnswerLanguage.ENGLISH) {
             return question;
         }
         try {
-            String translated = PromptBuilder.clean(chatClient.prompt()
-                    .user(promptBuilder.translatePrompt(question)).call().content());
+            String translated = PromptBuilder.clean(model.complete(user.getId(), null,
+                    promptBuilder.translatePrompt(question)));
             return translated.isBlank() ? question : translated.lines().findFirst().orElse(question).strip();
         } catch (RuntimeException ex) {
             return question;

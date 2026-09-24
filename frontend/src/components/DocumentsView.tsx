@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { api, type UploadedDocument } from '../api';
-import { dateTime, Dropzone, errorText, FactList, STATUS_LABELS, uploadAll, useDocuments } from './shared';
+import { api, type FormOption, type UploadedDocument } from '../api';
+import { dateTime, Dropzone, errorText, FactList, STATUS_LABELS, uploadAll, useDocuments, useForms } from './shared';
 
-/** Policies and receipts: upload, see what was read from each, delete. */
+/** Policies, receipts and claim forms: upload, see what was read from each, delete. */
 export default function DocumentsView() {
   const policies = useDocuments('POLICY');
   const receipts = useDocuments('RECEIPT');
+  const forms = useForms();
   const [errors, setErrors] = useState<string[]>([]);
 
   async function remove(doc: UploadedDocument) {
@@ -18,12 +19,22 @@ export default function DocumentsView() {
     await (doc.kind === 'POLICY' ? policies.refresh() : receipts.refresh());
   }
 
+  async function removeForm(form: FormOption) {
+    if (!window.confirm(`Delete ${form.name}? Claims already filled on it can no longer be downloaded.`)) return;
+    try {
+      await api.deleteForm(form.key.replace('upload:', ''));
+    } catch (err) {
+      setErrors([errorText(err)]);
+    }
+    await forms.refresh();
+  }
+
   return (
     <div className="page">
       <div className="page-head">
         <h1>My documents</h1>
         <p className="muted">
-          Add your benefits booklets and receipts. Scanned PDFs and photos are read with text recognition. Each key
+          Add your benefits booklets, receipts and claim forms. Files are encrypted where they are stored. Scanned PDFs and photos are read with text recognition. Each key
           detail shows the page it came from; anything marked <span className="check-badge">check</span> could not be
           confirmed in the document and should be checked.
         </p>
@@ -61,6 +72,40 @@ export default function DocumentsView() {
         />
         <DocumentList documents={receipts.documents} loaded={receipts.loaded} onDelete={remove}
                       empty="No receipt yet." />
+      </section>
+
+      <section className="doc-section">
+        <h2>Claim forms</h2>
+        <p className="muted small">
+          Built-in forms are always available. Add your insurer's fillable PDF to have your claims filled on it.
+        </p>
+        <Dropzone
+          accept=".pdf"
+          hint="A fillable (interactive) PDF from your insurer's website"
+          onFiles={async (files) => {
+            setErrors(await uploadAll(files, api.uploadForm));
+            await forms.refresh();
+          }}
+        />
+        <ul className="doc-list">
+          {forms.forms.map((form) => (
+            <li key={form.key} className="doc-card">
+              <div className="doc-card-head">
+                <span className="file">{form.name}</span>
+                <span className="status" data-status={form.status}>
+                  {form.builtIn ? 'Built in' : STATUS_LABELS[form.status]}
+                </span>
+                <span className="muted small">{form.fieldCount ? `${form.fieldCount} fields` : ''}</span>
+                {!form.builtIn && (
+                  <button type="button" className="quiet" onClick={() => void removeForm(form)}>
+                    Delete
+                  </button>
+                )}
+              </div>
+              {form.status === 'FAILED' && <p className="error small">{form.errorMessage}</p>}
+            </li>
+          ))}
+        </ul>
       </section>
     </div>
   );

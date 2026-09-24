@@ -8,7 +8,10 @@ public enum DocumentKind {
     POLICY(Set.of("pdf", "docx", "txt", "md", "png", "jpg", "jpeg")),
 
     /** A receipt or invoice: read for the amounts and dates that go on a claim form. */
-    RECEIPT(Set.of("pdf", "png", "jpg", "jpeg", "txt"));
+    RECEIPT(Set.of("pdf", "png", "jpg", "jpeg", "txt")),
+
+    /** An insurer's fillable claim form: its fields are read and mapped, then filled for a claim. */
+    FORM(Set.of("pdf"));
 
     private final Set<String> extensions;
 

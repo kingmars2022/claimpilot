@@ -31,10 +31,83 @@ services:
       timeout: 3s
       retries: 10
 
-  # Added in later phases (started with --profile when needed):
-  # redis    (phase 5, profile "cache")
-  # kafka    (phase 3, profile "events")
+  # Phase 3, started with: docker compose --profile events up -d
+  # Kafka carries "uploaded" and "processed" events between the API and the processing workers.
+  kafka:
+    image: apache/kafka:3.9.1
+    container_name: claimpilot-kafka
+    profiles: ["events"]
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+  # S3-compatible object storage standing in for Amazon S3 (free, Apache 2.0).
+  # Console: http://localhost:9001 (claimpilot / claimpilot-secret)
+  s3:
+    image: rustfs/rustfs:1.0.0
+    container_name: claimpilot-s3
+    profiles: ["events"]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      RUSTFS_ACCESS_KEY: claimpilot
+      RUSTFS_SECRET_KEY: claimpilot-secret
+      RUSTFS_CONSOLE_ENABLE: "true"
+    volumes:
+      - s3data:/data
+
+  # Phase 5, started with: docker compose --profile cache up -d
+  redis:
+    image: redis:7.4-alpine
+    container_name: claimpilot-redis
+    profiles: ["cache"]
+    ports:
+      - "6379:6379"
+
+  # The whole app in Docker, started with: docker compose --profile app up -d --build
+  # Then open http://localhost:3000. Ollama keeps running natively on the Mac (Apple GPU).
+  backend:
+    build: ./backend
+    container_name: claimpilot-backend
+    profiles: ["app"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/claimpilot
+      SPRING_MONGODB_URI: mongodb://mongo:27017/claimpilot
+      SPRING_AI_OLLAMA_BASE_URL: http://host.docker.internal:11434
+      CLAIMPILOT_STORAGE_LOCAL_ROOT: /app/data/uploads
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - uploads:/app/data/uploads
+
+  frontend:
+    build: ./frontend
+    container_name: claimpilot-frontend
+    profiles: ["app"]
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
 
 volumes:
+  uploads:
   pgdata:
   mongodata:
+  s3data:

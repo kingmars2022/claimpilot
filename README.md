@@ -45,21 +45,39 @@ what the plan pays, and whether approval or a referral is needed first. Every it
 clause it came from; items the model cannot tie to a clause are dropped.
 
 ### 3. Pre-filled claim form
-The demo form is a fictional second-plan ("supplementary") health claim:
+Fill a built-in form (a fictional English form from Cedarview, a French one from Harbourline) or
+**upload your insurer's own fillable PDF**: its fields are read and matched by their labels, whatever
+the language or field names. For a second-plan ("supplementary") health claim:
 
 | Form section | Filled from |
 |---|---|
 | Plan member, policy and certificate numbers, employer | The plan being claimed on (the spouse's policy) |
 | Other plan: insurer, policy and certificate numbers | The plan that paid first (your own policy) |
-| Provider, date, service, amount charged, amount paid by the other plan | The receipt (PDF or photo) |
-| Patient name, date of birth, address | Your profile |
+| Provider, date, service, receipt number, amount charged, amount paid by the other plan | The receipt (PDF or photo) |
+| Patient name, date of birth, address, phone | Your profile |
 | Relationship to the plan member | Chosen when you start the claim |
 | Amount claimed | Calculated: charged minus paid by the other plan |
 | Signature, declaration, date signed, bank details | **Never filled.** Left for you |
 
 Each field shows its source (document, page and quote). Values the code could not confirm in the
 document are flagged *check*. The filled PDF can only be downloaded once every field has been
-checked, and it stays editable.
+checked, and it stays editable. Claim types: paramedical care, dental, prescription drugs, vision.
+
+### 4. Assistant
+Describe the situation once, in any language: *"My physio cost $120 and my plan paid $84, can I claim
+the rest on my husband's plan?"* The assistant plans the steps (answer from the policy, show the claim
+rules, pre-fill the form), asks back when something is ambiguous (*which plan?*), then runs the three
+modules above in order, each with its own checks.
+
+### Around the modules
+- **Your data**: uploads are encrypted at rest (AES-256-GCM); every search and every file is scoped to
+  the signed-in user; *Delete my data* removes everything, cached model replies included.
+- **Live updates**: when a document finishes processing, the browser is told at once (Server-Sent
+  Events) and a short message appears.
+- **Activity**: sign-ins, uploads, processing results, claims and downloads are logged, and shown to
+  the user under Profile. Values from documents are never written to the log.
+- **Fair use**: requests that use the model are limited per user per minute (429 with Retry-After);
+  identical prompts are answered from a cache.
 
 ## Walkthrough
 
@@ -146,33 +164,49 @@ Shown at the top of this page. When the claim is started:
   by the signed-in user and the chosen policy, so another person's policy text never reaches the model.
 - **Prompt-injection guard.** Document text is passed as data, with instructions to ignore any
   instructions inside it.
+- **The model plans, the code decides.** The assistant's plan is one JSON reply. Code drops unknown
+  actions and invented document numbers, always shows the claim rules before a form, fills in what it
+  can work out itself (the plan that paid first is the one naming the member; the kind of care comes
+  from the receipt; the relationship from the plan member's name), and asks the member when something
+  is still ambiguous. The model never calls a service directly.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    UI[React + Vite] -->|REST + JWT| API[Spring Boot 4 API]
-    API --> FS[(File storage<br/>local disk → S3)]
-    API -->|async| PROC[Processing<br/>PDF text · OCR · chunks · facts]
-    PROC --> OCR[Tesseract OCR<br/>photos and scanned pages]
-    PROC --> EMB[Ollama bge-m3<br/>embeddings]
-    PROC --> LLM[Ollama qwen3:8b<br/>fact extraction]
-    PROC --> PG[(PostgreSQL + pgvector<br/>users · documents · facts · drafts · vectors)]
-    PROC --> MONGO[(MongoDB<br/>raw extraction logs · conversations)]
-    API --> ASK[Ask · Guide · Fill]
-    ASK -->|filtered by owner + policy| PG
-    ASK --> LLM
-    ASK --> PDF[PDFBox<br/>fills the form]
+    UI[React + Vite] -->|REST + JWT · SSE| API[Spring Boot 4 API]
+    API -->|encrypted AES-GCM| FS[(Files<br/>disk · S3 / RustFS)]
+    API -->|inline, or Kafka event| PROC[Processing worker<br/>PDF text · OCR · chunks · facts]
+    PROC --> OCR[Tesseract OCR]
+    PROC --> PG[(PostgreSQL + pgvector<br/>users · documents · facts · claims · audit · vectors)]
+    PROC --> MONGO[(MongoDB<br/>extraction logs · conversations)]
+    PROC -->|processed event| API
+    API --> MOD[Assistant → Ask · Guide · Fill]
+    MOD -->|filtered by owner + policy| PG
+    MOD --> CACHE[(Cache + rate limits<br/>memory · Redis)]
+    CACHE --> LLM[Models<br/>Ollama · Amazon Bedrock]
+    MOD --> PDF[PDFBox fills the form]
 ```
+
+Everything beyond PostgreSQL and MongoDB is optional and switched on by a Spring profile, so the app
+runs on a laptop with two containers and scales out without code changes:
+
+| Profile | What changes | Needs |
+|---|---|---|
+| *(default)* | Files on disk, processing on a background thread, cache in memory, Ollama | `docker compose up -d` |
+| `events` | Files in an S3 bucket; uploads and results travel as Kafka events to a separate worker | `docker compose --profile events up -d` (Kafka, RustFS) |
+| `cache` | Model replies and rate limits shared across servers in Redis | `docker compose --profile cache up -d` |
+| `aws` | Amazon Bedrock (Claude, Titan embeddings), Amazon S3, RDS; secrets from the environment | an AWS account, see [docs/deploy-aws.md](docs/deploy-aws.md) (paid) |
 
 | Layer | Technology |
 |---|---|
-| Backend | Java 21, Spring Boot 4.1, Spring AI 2.0, Spring Security (JWT), Spring Data JPA and MongoDB, Flyway, virtual threads |
-| AI | Ollama locally: qwen3:8b (chat, extraction, mapping), bge-m3 (multilingual embeddings). Amazon Bedrock planned |
+| Backend | Java 21, Spring Boot 4.1, Spring AI 2.0, Spring Security (JWT), Spring Data JPA, MongoDB and Redis, Spring Kafka, Flyway, virtual threads |
+| AI | Ollama locally: qwen3:8b (answers, extraction, mapping, planning), bge-m3 (multilingual embeddings). Amazon Bedrock with the `aws` profile |
 | Documents | Apache PDFBox (read pages, fill forms), Tesseract OCR (photos, scanned PDF pages), Apache Tika (Word) |
-| Data | PostgreSQL 17 + pgvector (HNSW, cosine); MongoDB 7 for raw model replies and conversations |
-| Frontend | React 19, TypeScript, Vite |
-| Testing | JUnit 5, AssertJ, MockMvc, Testcontainers (pgvector, MongoDB) |
+| Data | PostgreSQL 17 + pgvector (HNSW, cosine); MongoDB 7; S3-compatible storage (AWS SDK v2); Redis 7; Kafka 3.9 |
+| Frontend | React 19, TypeScript, Vite; Server-Sent Events for notifications |
+| Delivery | Dockerfiles for backend and frontend, `docker compose --profile app` for the whole stack |
+| Testing | JUnit 5, AssertJ, MockMvc, Testcontainers (pgvector, MongoDB, Kafka, Redis, RustFS) |
 
 ## Getting started
 
@@ -200,7 +234,18 @@ cd frontend && npm install && npm run dev
 
 Open `http://localhost:5173` and sign in as **fiona** (password `demo1234`); her profile is already
 filled in. **sam** is an empty account. Outside local development, set
-`CLAIMPILOT_SECURITY_JWT_SECRET` to a random string of at least 32 characters.
+`CLAIMPILOT_SECURITY_JWT_SECRET` to a random string of at least 32 characters and
+`CLAIMPILOT_STORAGE_ENCRYPTION_KEY` to `openssl rand -base64 32`.
+
+With Kafka, S3 storage and Redis (all free, in Docker):
+
+```bash
+docker compose --profile events --profile cache up -d
+cd backend && SPRING_PROFILES_ACTIVE=events,cache ./mvnw spring-boot:run
+```
+
+Or the whole app in Docker (Ollama still native): `docker compose --profile app up -d --build`, then
+open `http://localhost:3000`.
 
 ### Demo (1–2 minutes)
 
@@ -218,7 +263,10 @@ The files are in `sample-docs/`. All companies and people are fictional.
 3. **Claim**: choose *Paramedical care*, claim on Cedarview, paid first by Harbourline. The guide shows
    the 12-month deadline and the documents to send. Upload `physio-receipt-2026-03-05.png`.
 4. **Fill in the claim form**: every field shows its source; the amount claimed is $120.00 − $84.00 =
-   $36.00. Check each field, then download the PDF. Signature and declaration are blank.
+   $36.00. Check each field, then download the PDF. Signature and declaration are blank. To try your
+   insurer's own form, add `harbourline-demande-de-remboursement.pdf` under *Claim forms* and choose it.
+5. **Assistant**: *My physio cost $120 and my own plan paid $84. Can I claim the rest on my husband's
+   plan?* It asks which plan to claim on, then shows the claim rules and a pre-filled form.
 
 The sample documents are generated by `backend/src/test/java/com/claimpilot/samples/SampleDocuments.java`.
 
@@ -244,8 +292,13 @@ scoped to the signed-in user; another user's ids return 404.
 | `GET` / `DELETE` | `/api/claims/{id}` | One claim with its fields and sources. |
 | `PATCH` | `/api/claims/{id}/fields/{key}` | `{ value?, reviewed? }`: correct a value or mark it checked. |
 | `GET` | `/api/claims/{id}/pdf` | The filled PDF, once every field is checked. |
+| `GET` / `POST` / `DELETE` | `/api/forms`, `/api/forms/{id}` | Built-in claim forms and your uploaded fillable PDFs (`formKey` in `POST /api/claims`). |
+| `POST` | `/api/assistant` | `{ message, policyId?, claimType? }` → plan, steps (answer, guide, claim, question back), summary. |
+| `GET` | `/api/notifications`, `/api/notifications/stream` | Recent notifications; live stream (Server-Sent Events, token as `?access_token=`). |
+| `GET` | `/api/audit` | Your activity log, newest first. |
 
-Errors follow RFC 9457 (`application/problem+json`).
+Errors follow RFC 9457 (`application/problem+json`). Requests that use the model are limited per user
+(default 20 per minute) and answer `429` with `Retry-After` beyond that.
 
 ## Tests
 
@@ -256,7 +309,8 @@ cd backend
 
 - **Unit tests**: date and amount parsing (English and French), quote verification, extraction
   parsing, language detection, answer status parsing, call script, guide parsing, field mapping
-  rules, value assembly, PDF filling.
+  rules, value assembly, PDF filling, file encryption, the assistant's plan rules, cache and rate
+  limits (in memory and in a real Redis).
 - **Integration tests** run the whole application over HTTP against real PostgreSQL/pgvector and
   MongoDB in Docker (Testcontainers), with deterministic fake models:
   - `PolicyIntegrationTest`: verified facts, cited answers, unclear and not-in-policy answers,
@@ -264,7 +318,27 @@ cd backend
   - `ClaimIntegrationTest`: guide with cited items and caching, the complete pre-fill → review →
     download flow, mapping cache, and isolation between users.
   - `ScannedDocumentIntegrationTest`: OCR of a scanned PDF and a receipt photo (skipped without Tesseract).
-  - `AccountIntegrationTest`: sign-in, sign-up, profile, and account deletion across both databases.
+  - `AccountIntegrationTest`: sign-in, sign-up, profile, account deletion across both databases, the
+    notification stream's token rule, and the activity log.
+  - `FormIntegrationTest`: a claim filled on an uploaded French form, a PDF without fields rejected,
+    another user's form refused.
+  - `EventDrivenIntegrationTest`: with real Kafka and an S3 server, an upload is stored encrypted,
+    processed by the worker and comes back as a notification.
+  - `AssistantIntegrationTest`: a question back, then guide and pre-filled form from one message.
+
+### Accuracy evaluation
+
+`backend/src/test/resources/eval/cases.json` holds 17 questions (English, French, Chinese; answered,
+unclear and not-in-policy cases) and 13 facts to extract from the sample documents. With Ollama
+running:
+
+```bash
+cd backend
+./mvnw test -Peval
+```
+
+It runs the real models and writes `target/eval-report.md`: answer status accuracy, cited page,
+expected content, facts extracted, average answer time. It is not part of the normal build.
 
 ## Principles
 
@@ -279,10 +353,12 @@ cd backend
 
 - [x] **Phase 1**: ask the policy (three outcomes, call kit), claim guide, pre-filled second-plan
   claim form with sources, OCR, accounts and data isolation.
-- [ ] **Phase 2**: more claim types and form templates; encrypted file storage.
-- [ ] **Phase 3**: event-driven processing. S3 upload triggers AWS Lambda for OCR and extraction,
-  Kafka events update the claim draft and notify the user; audit log.
-- [ ] **Phase 4**: agent that recognizes the user's intent and chains questions, guide and form filling.
-- [ ] **Phase 5**: Redis for mapping and answer caches and rate limiting; accuracy evaluation set;
-  AWS deployment with Bedrock.
-- [ ] **Later**: coordination-of-benefits rules to decide which plan pays first automatically.
+- [x] **Phase 2**: vision claims; built-in English and French forms and the user's own fillable PDFs;
+  files encrypted at rest.
+- [x] **Phase 3**: event-driven processing with S3 storage and Kafka (a worker in place of an
+  S3-triggered Lambda), live notifications, activity log.
+- [x] **Phase 4**: assistant that plans from one message and chains answer, claim rules and form filling.
+- [x] **Phase 5**: model reply cache and per-user rate limits (memory or Redis), accuracy evaluation
+  set, Bedrock profile, Dockerfiles and an AWS deployment guide (not deployed: it is paid).
+- [ ] **Next**: run the evaluation on more real-world policies; S3 events through SQS on AWS;
+  coordination-of-benefits rules to decide which plan pays first automatically.

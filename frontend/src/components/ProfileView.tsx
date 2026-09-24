@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, type Profile } from '../api';
+import { api, type ActivityEntry, type Profile } from '../api';
 import { useSession } from '../auth';
-import { errorText } from './shared';
+import { dateTime, errorText } from './shared';
 
 const EMPTY: Profile = {
   fullName: null,
@@ -23,14 +23,31 @@ const FIELDS: { key: keyof Profile; label: string; type?: string; autoComplete?:
   { key: 'phone', label: 'Phone', type: 'tel', autoComplete: 'tel' },
 ];
 
+const ACTION_LABELS: Record<string, string> = {
+  SIGNED_IN: 'Signed in',
+  SIGNED_UP: 'Account created',
+  PROFILE_UPDATED: 'Profile updated',
+  DOCUMENT_UPLOADED: 'Uploaded',
+  DOCUMENT_READY: 'Read and ready',
+  DOCUMENT_FAILED: 'Could not be read',
+  DOCUMENT_DELETED: 'Deleted',
+  CLAIM_CREATED: 'Claim form started',
+  CLAIM_FIELD_CORRECTED: 'Claim field corrected',
+  CLAIM_DOWNLOADED: 'Claim form downloaded',
+  CLAIM_DELETED: 'Claim form deleted',
+  ASSISTANT_USED: 'Assistant',
+};
+
 export default function ProfileView() {
   const { signOut } = useSession();
   const [profile, setProfile] = useState<Profile>(EMPTY);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activity, setActivity] = useState<ActivityEntry[]>([]);
 
   useEffect(() => {
     api.profile().then(setProfile, (err) => setError(errorText(err)));
+    api.activity().then(setActivity, () => setActivity([]));
   }, []);
 
   async function save(event: FormEvent) {
@@ -84,6 +101,25 @@ export default function ProfileView() {
           Save profile
         </button>
       </form>
+
+      <section className="activity">
+        <h2>Activity</h2>
+        <p className="muted small">What happened to your account and documents, newest first. Values read from your
+          documents are never written here.</p>
+        {activity.length === 0 ? (
+          <p className="empty">Nothing yet.</p>
+        ) : (
+          <ul className="activity-list">
+            {activity.slice(0, 30).map((entry, index) => (
+              <li key={`${entry.at}-${index}`}>
+                <span className="activity-action">{ACTION_LABELS[entry.action] ?? entry.action}</span>
+                {entry.detail && <span className="activity-detail">{entry.detail}</span>}
+                <span className="muted small">{dateTime.format(new Date(entry.at))}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className="danger-zone">
         <h2>Delete my data</h2>

@@ -8,14 +8,19 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.claimpilot.audit.AuditAction;
+import com.claimpilot.audit.AuditService;
+
 @RestController
 @RequestMapping("/api/profile")
 public class ProfileController {
 
     private final ProfileRepository profiles;
     private final CurrentUserService currentUser;
+    private final AuditService audit;
 
-    public ProfileController(ProfileRepository profiles, CurrentUserService currentUser) {
+    public ProfileController(ProfileRepository profiles, CurrentUserService currentUser, AuditService audit) {
+        this.audit = audit;
         this.profiles = profiles;
         this.currentUser = currentUser;
     }
@@ -31,6 +36,7 @@ public class ProfileController {
         Long userId = currentUser.get().getId();
         Profile profile = profiles.findById(userId).orElseGet(() -> new Profile(userId));
         profile.update(request);
+        audit.record(userId, AuditAction.PROFILE_UPDATED, null, null, null);
         return ProfileDto.from(profiles.save(profile));
     }
 }

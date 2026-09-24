@@ -1,0 +1,43 @@
+# Phase 5: running on AWS. Nothing here is used unless SPRING_PROFILES_ACTIVE includes "aws".
+# Bedrock, RDS, S3 and the rest are PAID services: see docs/deploy-aws.md for the cost estimate
+# before creating anything. Credentials come from the task's IAM role, never from this file.
+spring:
+  ai:
+    model:
+      chat: bedrock-converse
+      embedding: bedrock-titan
+    bedrock:
+      aws:
+        region: ${AWS_REGION:ca-central-1}
+      converse:
+        chat:
+          options:
+            # A Claude model or inference profile enabled in your Bedrock console, for example
+            # anthropic.claude-haiku-4-5-20251001-v1:0 (check the exact id offered in your region).
+            model: ${CLAIMPILOT_BEDROCK_CHAT_MODEL}
+            temperature: 0.2
+      titan:
+        embedding:
+          model: amazon.titan-embed-text-v2:0   # 1024 dimensions, same as bge-m3: no schema change
+  datasource:
+    url: ${CLAIMPILOT_DB_URL}                   # RDS for PostgreSQL 17 with the pgvector extension
+    username: ${CLAIMPILOT_DB_USER}
+    password: ${CLAIMPILOT_DB_PASSWORD}
+  mongodb:
+    uri: ${CLAIMPILOT_MONGODB_URI}              # MongoDB Atlas (free M0 tier) or Amazon DocumentDB
+
+claimpilot:
+  storage:
+    type: s3
+    encryption-key: ${CLAIMPILOT_STORAGE_ENCRYPTION_KEY}
+    s3:
+      endpoint: ""                              # empty: the real Amazon S3
+      region: ${AWS_REGION:ca-central-1}
+      bucket: ${CLAIMPILOT_S3_BUCKET}
+      access-key: ""                            # empty: the IAM role of the task
+      secret-key: ""
+      path-style: false
+  security:
+    jwt-secret: ${CLAIMPILOT_SECURITY_JWT_SECRET}
+  ocr:
+    languages: eng+fra                          # the Docker image installs both languages

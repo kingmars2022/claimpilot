@@ -9,7 +9,7 @@ import {
   type Relationship,
   type SourceType,
 } from '../api';
-import { dateTime, Dropzone, errorText, PageRef, uploadAll, useDocuments } from './shared';
+import { dateTime, Dropzone, errorText, PageRef, uploadAll, useDocuments, useForms } from './shared';
 
 const RELATIONSHIPS: { value: Relationship; label: string }[] = [
   { value: 'SPOUSE', label: "I'm the plan member's spouse" },
@@ -28,10 +28,15 @@ const SOURCE_LABELS: Record<SourceType, string> = {
   MISSING: 'Missing',
 };
 
-export default function ClaimView() {
+export default function ClaimView({ openDraftId }: { openDraftId?: string | null }) {
   const [drafts, setDrafts] = useState<ClaimDraft[]>([]);
   const [open, setOpen] = useState<ClaimDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!openDraftId) return;
+    api.draft(openDraftId).then(setOpen, (err) => setError(errorText(err)));
+  }, [openDraftId]);
 
   const refresh = useCallback(async () => {
     try {
@@ -100,6 +105,8 @@ export default function ClaimView() {
 function NewClaim({ onCreated }: { onCreated: (draft: ClaimDraft) => void }) {
   const policies = useDocuments('POLICY');
   const receipts = useDocuments('RECEIPT');
+  const { forms, refresh: refreshForms } = useForms();
+  const [formKey, setFormKey] = useState('builtin:cedarview-secondary');
   const [types, setTypes] = useState<{ type: ClaimType; label: string }[]>([]);
   const [claimType, setClaimType] = useState<ClaimType>('SECONDARY_PARAMEDICAL');
   const [policyId, setPolicyId] = useState('');
@@ -144,6 +151,7 @@ function NewClaim({ onCreated }: { onCreated: (draft: ClaimDraft) => void }) {
           otherPolicyId: otherPolicyId || null,
           receiptId: receiptId || null,
           relationship,
+          formKey,
         }),
       );
     } catch (err) {
@@ -198,6 +206,9 @@ function NewClaim({ onCreated }: { onCreated: (draft: ClaimDraft) => void }) {
                   </option>
                 ))}
             </select>
+            {policyId && readyPolicies.length < 2 && (
+              <span className="field-hint">Add the plan that paid first under My documents to choose it here.</span>
+            )}
           </label>
           <label>
             Who received the care
@@ -262,8 +273,49 @@ function NewClaim({ onCreated }: { onCreated: (draft: ClaimDraft) => void }) {
           <span className="step-number">4</span> The claim form
         </h2>
         <p className="muted small">
-          Fills the plan's second-payer claim form. Signature, declaration and bank details are always left for you.
+          Choose the form to fill: a built-in one, or your insurer's own fillable PDF. Each field is matched by its
+          label once per form version. Signature, declaration and bank details are always left for you.
         </p>
+        <label className="inline-label">
+          Claim form
+          <select value={formKey} onChange={(e) => setFormKey(e.target.value)}>
+            {forms
+              .filter((f) => f.status === 'READY')
+              .map((f) => (
+                <option key={f.key} value={f.key}>
+                  {f.name}
+                  {f.fieldCount ? ` (${f.fieldCount} fields)` : ''}
+                </option>
+              ))}
+          </select>
+        </label>
+        {forms
+          .filter((f) => !f.builtIn && f.status !== 'READY')
+          .map((f) => (
+            <p key={f.key} className={f.status === 'FAILED' ? 'error' : 'pending'}>
+              {f.name}: {f.status === 'FAILED' ? f.errorMessage : 'reading its fields…'}
+            </p>
+          ))}
+        <Dropzone
+          accept=".pdf"
+          hint="A fillable (interactive) PDF from your insurer's website"
+          onFiles={async (files) => {
+            const problems = await uploadAll(files, async (file) => {
+              const uploaded = await api.uploadForm(file);
+              setFormKey(`upload:${uploaded.id}`);
+            });
+            if (problems.length) setError(problems.join(' '));
+            await refreshForms();
+          }}
+        >
+          Use your insurer's form: drop it here, or <span className="link">choose a file</span>
+        </Dropzone>
+        {policyId && (!otherPolicyId || !receiptId) && (
+          <p className="field-hint">
+            {!receiptId && 'No receipt chosen: the provider, date and amounts will be left empty. '}
+            {!otherPolicyId && 'No plan that paid first: its insurer and numbers will be left empty.'}
+          </p>
+        )}
         {error && <p className="error">{error}</p>}
         <button type="button" className="primary" disabled={!policyId || busy} onClick={() => void create()}>
           {busy ? 'Filling in the form…' : 'Fill in the claim form'}
@@ -273,7 +325,7 @@ function NewClaim({ onCreated }: { onCreated: (draft: ClaimDraft) => void }) {
   );
 }
 
-function GuideView({ guide }: { guide: ClaimGuide }) {
+export function GuideView({ guide }: { guide: ClaimGuide }) {
   const [done, setDone] = useState<Set<number>>(new Set());
   if (!guide.found) {
     return <p className="notice">This policy does not describe how to claim for this type of care. Call your insurer.</p>;
@@ -411,7 +463,7 @@ function DraftReview({
         <p className="muted">
           {draft.claimTypeLabel}. Claim on {draft.policy?.fileName ?? 'a deleted policy'}
           {draft.otherPolicy && `, first paid by ${draft.otherPolicy.fileName}`}
-          {draft.receipt && `, receipt ${draft.receipt.fileName}`}.
+          {draft.receipt && `, receipt ${draft.receipt.fileName}`}. Form: {draft.form.name}.
         </p>
       </div>
 
@@ -426,6 +478,12 @@ function DraftReview({
           Download filled PDF
         </button>
       </div>
+      {!draft.readyToDownload && (
+        <p className="field-hint">
+          Tick each field once you have checked it; the PDF can be downloaded when all are ticked. An empty field can be
+          filled in here, or ticked and completed on the PDF.
+        </p>
+      )}
       {error && <p className="error">{error}</p>}
 
       <div className="table-wrap">

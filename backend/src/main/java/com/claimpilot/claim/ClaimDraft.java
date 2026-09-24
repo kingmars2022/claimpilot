@@ -42,6 +42,10 @@ public class ClaimDraft {
     @Column(nullable = false)
     private Relationship relationship;
 
+    /** The form this claim is filled on; see {@link FormCatalog}. */
+    @Column(nullable = false)
+    private String formKey;
+
     @Column(nullable = false)
     private Instant createdAt;
 
@@ -57,7 +61,8 @@ public class ClaimDraft {
     }
 
     public ClaimDraft(Long ownerId, ClaimType claimType, UUID policyId, UUID otherPolicyId, UUID receiptId,
-                      Relationship relationship) {
+                      Relationship relationship, String formKey) {
+        this.formKey = formKey;
         this.ownerId = ownerId;
         this.claimType = claimType;
         this.policyId = policyId;
@@ -70,6 +75,10 @@ public class ClaimDraft {
 
     public void addField(DataKey key, DraftValue value) {
         fields.add(new ClaimDraftField(this, key, value));
+    }
+
+    public String getFormKey() {
+        return formKey;
     }
 
     public Optional<ClaimDraftField> field(DataKey key) {

@@ -1,5 +1,6 @@
 package com.claimpilot.document;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -12,10 +13,13 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import com.claimpilot.claim.FormTemplate;
 import com.claimpilot.config.AppProperties;
+import com.claimpilot.events.DocumentProcessed;
 import com.claimpilot.extraction.DocumentFact;
 import com.claimpilot.extraction.DocumentFactRepository;
 import com.claimpilot.extraction.ExtractedFact;
@@ -23,9 +27,10 @@ import com.claimpilot.extraction.FactExtractor;
 import com.claimpilot.storage.FileStorage;
 
 /**
- * Runs in the background after an upload (the request returns 202 at once):
+ * Runs in the background after an upload (the request returns 202 at once), on a thread of this
+ * server or in a Kafka worker:
  * a policy is split into chunks, embedded and stored in pgvector, and read for its key facts;
- * a receipt is read for its key facts only.
+ * a receipt is read for its key facts only; a claim form is checked for fillable fields.
  */
 @Service
 public class ProcessingService {
@@ -45,10 +50,12 @@ public class ProcessingService {
     private final FactExtractor factExtractor;
     private final DocumentFactRepository facts;
     private final TokenTextSplitter splitter;
+    private final ApplicationEventPublisher events;
 
     public ProcessingService(DocumentRepository repository, FileStorage storage, DocumentReaderFactory readerFactory,
                              VectorStore vectorStore, FactExtractor factExtractor, DocumentFactRepository facts,
-                             AppProperties properties) {
+                             AppProperties properties, ApplicationEventPublisher events) {
+        this.events = events;
         this.repository = repository;
         this.storage = storage;
         this.readerFactory = readerFactory;
@@ -61,8 +68,17 @@ public class ProcessingService {
                 .build();
     }
 
+    /** Inline mode: processes on a background (virtual) thread; the upload request has already returned. */
     @Async
     public void processAsync(UUID documentId) {
+        process(documentId);
+    }
+
+    /**
+     * Reads, indexes and extracts one upload, then publishes {@link DocumentProcessed}. Called on a
+     * background thread (inline mode) or by a Kafka worker.
+     */
+    public void process(UUID documentId) {
         UploadedDocument doc = repository.findById(documentId).orElse(null);
         if (doc == null) {
             log.warn("Document {} disappeared before processing", documentId);
@@ -73,6 +89,11 @@ public class ProcessingService {
 
         Integer chunkCount = null;
         try {
+            if (doc.getKind() == DocumentKind.FORM) {
+                chunkCount = countFormFields(doc);
+                markReady(documentId, chunkCount);
+                return;
+            }
             DocumentReaderFactory.ReadResult read = readerFactory.read(storage.load(doc.getStorageKey()), doc.getFileName());
             if (read.pages().stream().allMatch(p -> p.text().isBlank())) {
                 throw new IllegalStateException("No readable text found. Try a clearer photo or a text PDF.");
@@ -90,10 +111,15 @@ public class ProcessingService {
             repository.findById(documentId).ifPresent(fresh -> {
                 fresh.markFailed(ex.getMessage());
                 repository.save(fresh);
+                publish(fresh);
             });
             return;
         }
 
+        markReady(documentId, chunkCount);
+    }
+
+    private void markReady(UUID documentId, Integer count) {
         UploadedDocument fresh = repository.findById(documentId).orElse(null);
         if (fresh == null) {
             // Deleted while processing: remove the chunks just added so nothing is left behind.
@@ -101,9 +127,29 @@ public class ProcessingService {
             facts.deleteByDocumentId(documentId);
             return;
         }
-        fresh.markReady(chunkCount);
+        fresh.markReady(count);
         repository.save(fresh);
         log.info("Processed {} {}", fresh.getKind(), fresh.getFileName());
+        publish(fresh);
+    }
+
+    private void publish(UploadedDocument doc) {
+        events.publishEvent(new DocumentProcessed(doc.getId(), doc.getOwnerId(), doc.getKind(), doc.getFileName(),
+                doc.getStatus(), doc.getErrorMessage(), Instant.now()));
+    }
+
+    /** A claim form must be a fillable PDF; its field count is stored in place of a chunk count. */
+    private int countFormFields(UploadedDocument doc) throws java.io.IOException {
+        byte[] bytes;
+        try (java.io.InputStream in = storage.load(doc.getStorageKey()).getInputStream()) {
+            bytes = in.readAllBytes();
+        }
+        int fields = FormTemplate.of(doc.getFileName(), bytes).fields().size();
+        if (fields == 0) {
+            throw new IllegalStateException(
+                    "This PDF has no fillable fields. Upload the insurer's fillable (interactive) PDF form.");
+        }
+        return fields;
     }
 
     /** Copies each chunk with the metadata needed for citations, isolation and deletion. */

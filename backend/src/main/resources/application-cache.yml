@@ -1,0 +1,10 @@
+# Phase 5: model replies and rate limits shared by every server, in Redis.
+#   docker compose --profile cache up -d
+#   SPRING_PROFILES_ACTIVE=cache ./mvnw spring-boot:run      (or events,cache for both)
+claimpilot:
+  cache:
+    type: redis
+management:
+  health:
+    redis:
+      enabled: true
