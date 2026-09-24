@@ -1,83 +1,108 @@
-# CompanyBrain
+# ClaimPilot
 
-**An AI knowledge assistant for internal company documents.**
+**Ask your insurance policy, see what a claim needs, and get the claim form filled in from your own documents.**
 
-Employees ask questions in plain English. CompanyBrain finds the answer in the company's own
-documents and replies with a numbered citation for every fact. When the documents do not cover
-the question, it says so instead of guessing.
+Upload your group benefits booklet and ask questions in English, French or Chinese: every answer
+comes from the policy and cites the page. If the policy is silent, ClaimPilot prepares the insurer's
+number, your policy numbers and a script for the call. When you need to claim, it lists the
+deadlines and documents *your* policy requires, then pre-fills the claim form from your policies,
+your receipt and your profile, showing where every value came from. You check each field, sign and
+submit the form yourself.
 
-> Example: an employee asks *"How many vacation days do I get in my first year?"*
-> CompanyBrain retrieves the passage from the employee handbook, answers in one sentence,
-> and links the answer to its source.
+<!-- Screenshot: add docs/screenshot.png showing the claim review page. -->
 
-![CompanyBrain answering a question with a cited source highlighted in the Sources panel](docs/screenshot.png)
+## Why
 
-## Why this project
+- Half of Canadians do not know what insurance coverage they have, and 40–60% of workplace health
+  benefits go unused each year, mostly because employees do not know what is covered.
+- Clinics can bill the first plan directly, but a claim on a second plan (a spouse's group plan)
+  usually has to be filled in and sent by hand.
+- Complaints to the General Insurance OmbudService reached a record in 2024–2025, most about claims
+  and how to read the policy.
 
-Most companies keep policies, guides and procedures in documents that people struggle to find,
-and HR, IT and Finance spend hours answering the same questions. General-purpose chatbots do not
-know internal policies and may invent them. CompanyBrain uses retrieval-augmented generation (RAG):
+Plain "upload a document and chat with it" is easy to copy. ClaimPilot's value is the whole loop
+(*is it covered → how do I claim → the form is ready*) and the engineering around the AI that makes
+the result trustworthy.
 
-- **Semantic retrieval.** Documents are split into chunks and embedded (bge-m3), so a question
-  matches the right passage even when it uses different words.
-- **Grounded answers.** The model may only use the retrieved passages, must cite them as `[n]`, and
-  replies with a fixed "not found" message when the documents do not cover the question.
-- **Honest failure.** If no passage passes the similarity threshold, the API answers without calling
-  the model at all, which avoids hallucinations and saves compute.
-- **Permission-aware retrieval.** A document can be limited to departments. The permission check
-  happens inside the vector search, so text a user may not see never reaches the model.
+## What it does
 
-## Features
+### 1. Ask your policy
+- Answers in the language of the question, even when the policy is in another language.
+- Every fact cites the policy page; the Sources panel shows the clause text.
+- Three outcomes:
+  - **Answered**: the clauses answer the question.
+  - **Unclear**: the relevant clauses are shown with a note to confirm with the insurer.
+  - **Not in the policy**: a call kit with the insurer's phone and hours, your group policy and
+    certificate numbers, and a script to read (in English, translated if you asked in French or
+    Chinese). When nothing relevant is found, no model call is made at all.
+- Follow-up questions keep the context of the conversation (stored in MongoDB).
 
-### Phase 1: grounded answers
+### 2. Claim guide
+For a claim type and a policy: deadlines, documents to include (a checklist), how to submit,
+what the plan pays, and whether approval or a referral is needed first. Every item cites the
+clause it came from; items the model cannot tie to a clause are dropped.
 
+### 3. Pre-filled claim form
+The demo form is a fictional second-plan ("supplementary") health claim:
 
-- Upload PDF, Word, Markdown and text files; indexing runs in the background (`202 Accepted`).
-- Markdown and text files are split at their headings, then into chunks of about 300 tokens,
-  so every citation names its section (for example *Vacation* or *Client meals*).
-- PDF answers cite page numbers.
-- Prompt-injection guard: retrieved text is treated as reference material, never as instructions.
-- Deleting a document removes its vectors, its file and its database record.
+| Form section | Filled from |
+|---|---|
+| Plan member, policy and certificate numbers, employer | The plan being claimed on (the spouse's policy) |
+| Other plan: insurer, policy and certificate numbers | The plan that paid first (your own policy) |
+| Provider, date, service, amount charged, amount paid by the other plan | The receipt (PDF or photo) |
+| Patient name, date of birth, address | Your profile |
+| Relationship to the plan member | Chosen when you start the claim |
+| Amount claimed | Calculated: charged minus paid by the other plan |
+| Signature, declaration, date signed, bank details | **Never filled.** Left for you |
 
-### Phase 2: users, permissions and conversations
+Each field shows its source (document, page and quote). Values the code could not confirm in the
+document are flagged *check*. The filled PDF can only be downloaded once every field has been
+checked, and it stays editable.
 
-- Sign-in with JWT bearer tokens (Spring Security OAuth2 resource server, HS256) and three roles:
-  **Employee** asks questions, **Knowledge manager** also manages documents, **Admin** also manages
-  users and departments.
-- Each document is visible to the whole company or to selected departments. Every chunk stores an
-  `access` list in its vector metadata, and each search adds a filter for the user's department.
-  Changing who can see a document updates that metadata with one SQL statement instead of
-  re-embedding the file.
-- Role and department are read from the database on every request, so an admin's change applies
-  immediately, even to tokens that were already issued.
-- Conversation history is stored in MongoDB. A follow-up such as *"And from the third year?"* is
-  searched both on its own and together with the previous question, and the model receives the
-  last few turns as context. Follow-ups cost no extra model call, so they are as fast as a first
-  question.
+## How the AI is kept honest
+
+- **The model reads, the code checks.** When a document is uploaded, the model extracts key facts
+  (policy number, phone, amounts, dates) together with the exact quote each one came from. Code then
+  looks for that quote in the document text, finds its page, and confirms the value is inside the
+  quote, parsing dates and amounts in English and French formats. Anything it cannot confirm is
+  marked unverified instead of being trusted.
+- **The model maps, the code fills.** PDF field names are often meaningless (`txtField_07`). The model
+  reads each field's label once and maps it to a known data item; the mapping is stored per form
+  version (SHA-256) and reused, so later claims need no model call. Apache PDFBox writes the values,
+  which is deterministic and unit-tested.
+- **Hard rules in code, not in the prompt.** Signature, declaration and consent fields are forced to
+  stay blank even if the model maps them to a value (a test checks exactly that). An "answered"
+  reply that cites nothing is downgraded to "unclear". Guide items without a valid clause are dropped.
+- **Data isolation.** Every chunk in pgvector carries its owner's id, and every search is filtered
+  by the signed-in user and the chosen policy, so another person's policy text never reaches the model.
+- **Prompt-injection guard.** Document text is passed as data, with instructions to ignore any
+  instructions inside it.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    UI[React + Vite] -->|REST + JWT| API[Spring Boot 4 API<br/>Spring Security]
+    UI[React + Vite] -->|REST + JWT| API[Spring Boot 4 API]
     API --> FS[(File storage<br/>local disk → S3)]
-    API -->|async indexing| IDX[Indexing service<br/>extract · split · embed]
-    IDX --> EMB[Ollama<br/>bge-m3 embeddings]
-    IDX --> PG[(PostgreSQL<br/>pgvector + metadata)]
-    API --> RAG[Chat service<br/>retrieve · prompt · cite]
-    RAG -->|filtered by department| PG
-    RAG --> LLM[Ollama<br/>qwen3:8b]
-    RAG --> MONGO[(MongoDB<br/>conversations)]
-    API --> PG
+    API -->|async| PROC[Processing<br/>PDF text · OCR · chunks · facts]
+    PROC --> OCR[Tesseract OCR<br/>photos and scanned pages]
+    PROC --> EMB[Ollama bge-m3<br/>embeddings]
+    PROC --> LLM[Ollama qwen3:8b<br/>fact extraction]
+    PROC --> PG[(PostgreSQL + pgvector<br/>users · documents · facts · drafts · vectors)]
+    PROC --> MONGO[(MongoDB<br/>raw extraction logs · conversations)]
+    API --> ASK[Ask · Guide · Fill]
+    ASK -->|filtered by owner + policy| PG
+    ASK --> LLM
+    ASK --> PDF[PDFBox<br/>fills the form]
 ```
 
 | Layer | Technology |
 |---|---|
 | Backend | Java 21, Spring Boot 4.1, Spring AI 2.0, Spring Security (JWT), Spring Data JPA and MongoDB, Flyway, virtual threads |
-| AI | Ollama (qwen3:8b chat, bge-m3 embeddings) locally; Amazon Bedrock planned |
-| Data | PostgreSQL 17 with pgvector (HNSW index, cosine distance) for users, documents and vectors; MongoDB 7 for conversations |
+| AI | Ollama locally: qwen3:8b (chat, extraction, mapping), bge-m3 (multilingual embeddings). Amazon Bedrock planned |
+| Documents | Apache PDFBox (read pages, fill forms), Tesseract OCR (photos, scanned PDF pages), Apache Tika (Word) |
+| Data | PostgreSQL 17 + pgvector (HNSW, cosine); MongoDB 7 for raw model replies and conversations |
 | Frontend | React 19, TypeScript, Vite |
-| Infrastructure | Docker Compose |
 | Testing | JUnit 5, AssertJ, MockMvc, Testcontainers (pgvector, MongoDB) |
 
 ## Getting started
@@ -88,133 +113,107 @@ flowchart LR
 - Node.js 20 or later
 - Docker Desktop
 - [Ollama](https://ollama.com) installed natively (it uses the Apple GPU on macOS)
+- Tesseract for photos and scanned PDFs: `brew install tesseract` (add `tesseract-lang` for French
+  scans, then set `claimpilot.ocr.languages: eng+fra`)
 
-### 1. Pull the models (about 6 GB, one time)
+### Run
 
 ```bash
 ollama pull qwen3:8b
 ollama pull bge-m3
+
+docker compose up -d            # PostgreSQL and MongoDB
+
+cd backend && ./mvnw spring-boot:run
+# in another terminal
+cd frontend && npm install && npm run dev
 ```
 
-### 2. Start PostgreSQL and MongoDB
+Open `http://localhost:5173` and sign in as **fiona** (password `demo1234`); her profile is already
+filled in. **sam** is an empty account. Outside local development, set
+`CLAIMPILOT_SECURITY_JWT_SECRET` to a random string of at least 32 characters.
 
-```bash
-docker compose up -d
-```
+### Demo (1–2 minutes)
 
-### 3. Run the backend
+The files are in `sample-docs/`. All companies and people are fictional.
 
-```bash
-cd backend
-./mvnw spring-boot:run
-```
+1. **My documents**: upload `cedarview-policy-marc-gagnon.pdf` (Fiona's husband's plan, or the
+   `-scanned` version to show OCR) and `harbourline-police-fiona-tremblay-fr.pdf` (Fiona's own plan,
+   in French). Each shows the key details read from it, with page numbers.
+2. **Ask** about the Cedarview policy:
+   - *How much does my plan pay for physiotherapy each year?* → answered, cites page 2.
+   - *Are kinesiologist treatments covered?* → the policy only says they "may be considered", so this
+     is typically marked unclear and shows the clause.
+   - *我的保险报销针灸吗？* (acupuncture is not in the policy) → a reply in Chinese with a call kit and an
+     English script.
+3. **Claim**: choose *Paramedical care*, claim on Cedarview, paid first by Harbourline. The guide shows
+   the 12-month deadline and the documents to send. Upload `physio-receipt-2026-03-05.png`.
+4. **Fill in the claim form**: every field shows its source; the amount claimed is $120.00 − $84.00 =
+   $36.00. Check each field, then download the PDF. Signature and declaration are blank.
 
-The API starts on `http://localhost:8080`. Flyway creates the tables and the demo accounts, and
-Spring AI creates the `vector_store` table on first start.
-
-The token signing key has a development default. Anywhere else, set
-`COMPANYBRAIN_SECURITY_JWT_SECRET` to a random string of at least 32 characters.
-
-### 4. Run the frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open `http://localhost:5173`.
-
-### 5. Try the demo
-
-Sign in with one of the demo accounts (password `demo1234` for all of them):
-
-| Username | Role | Department |
-|---|---|---|
-| `ivan` | Employee | IT |
-| `fiona` | Employee | Finance |
-| `hana` | Knowledge manager | Human Resources |
-| `admin` | Admin | IT |
-
-As `hana` or `admin`, upload the three files in `sample-docs/` from the Library page, then ask:
-
-| Question | Answered from |
-|---|---|
-| How many vacation days do I get in my first year? | `employee-handbook.md` |
-| How do I connect to the VPN from home? | `it-guide.md` |
-| What is the maximum I can expense for a client dinner? | `expense-policy.md` |
-| What is the dress code? | Not covered: returns the "not found" message |
-
-To see permission-aware retrieval, change a document's visibility to *Human Resources* in the
-Library. `hana` still gets answers from it; `ivan` gets the "not found" message for the same question.
+The sample documents are generated by `backend/src/test/java/com/claimpilot/samples/SampleDocuments.java`.
 
 ## API
 
-All endpoints except login need `Authorization: Bearer <token>`.
+All endpoints except sign-in and sign-up need `Authorization: Bearer <token>`. Every resource is
+scoped to the signed-in user; another user's ids return 404.
 
-| Method | Path | Who | Description |
-|---|---|---|---|
-| `POST` | `/api/auth/login` | Anyone | `{ "username", "password" }` → token, expiry and user. |
-| `GET` | `/api/auth/me` | Signed in | The current user with role and department. |
-| `GET` | `/api/departments` | Signed in | All departments. |
-| `POST` | `/api/chat` | Signed in | `{ "question", "conversationId"? }` → cited answer and conversation id. |
-| `GET` | `/api/conversations` | Signed in | Your conversations, most recent first. |
-| `GET` / `DELETE` | `/api/conversations/{id}` | Owner | One conversation with its messages. |
-| `POST` | `/api/documents` | Knowledge manager, admin | Upload (multipart `file`, optional `departmentIds`). Returns `202`. |
-| `GET` | `/api/documents`, `/api/documents/{id}` | Knowledge manager, admin | Documents with status and visibility. |
-| `PUT` | `/api/documents/{id}/visibility` | Knowledge manager, admin | `{ "departmentIds": [...] }`; empty means the whole company. |
-| `DELETE` | `/api/documents/{id}` | Knowledge manager, admin | Delete the document, its file and its vectors. |
-| `GET` / `POST` | `/api/admin/users` | Admin | List or create users. |
-| `PUT` / `DELETE` | `/api/admin/users/{id}` | Admin | Update role, department, name or password; delete. |
-| `POST` | `/api/admin/departments` | Admin | Create a department. |
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/auth/login`, `/api/auth/register` | Sign in or sign up → token and user. |
+| `GET` | `/api/auth/me` | The signed-in user. |
+| `GET` / `PUT` | `/api/profile` | Name, date of birth, address, phone. |
+| `DELETE` | `/api/account` | Delete the account and all its data. |
+| `POST` / `GET` | `/api/policies` | Upload (multipart `file`, returns `202`) or list policies with their key facts. |
+| `GET` / `DELETE` | `/api/policies/{id}` | One policy; delete it with its chunks and facts. |
+| `POST` / `GET` / `DELETE` | `/api/receipts`, `/api/receipts/{id}` | Same for receipts. |
+| `POST` | `/api/chat` | `{ question, policyId, conversationId? }` → answer, status, language, citations, call kit. |
+| `GET` / `DELETE` | `/api/conversations`, `/api/conversations/{id}` | Conversation history. |
+| `GET` | `/api/claims/types` | Supported claim types. |
+| `GET` | `/api/claims/guide?policyId=&type=` | Deadlines, documents, submission, coverage, pre-approval. |
+| `POST` / `GET` | `/api/claims` | Start a pre-filled claim `{ claimType, policyId, otherPolicyId?, receiptId?, relationship }`, or list claims. |
+| `GET` / `DELETE` | `/api/claims/{id}` | One claim with its fields and sources. |
+| `PATCH` | `/api/claims/{id}/fields/{key}` | `{ value?, reviewed? }`: correct a value or mark it checked. |
+| `GET` | `/api/claims/{id}/pdf` | The filled PDF, once every field is checked. |
 
 Errors follow RFC 9457 (`application/problem+json`).
 
-## Running the tests
+## Tests
 
 ```bash
 cd backend
 ./mvnw test
 ```
 
-- Unit tests cover prompt building, citation parsing, follow-up context, result merging, Markdown sections and
-  access rules.
-- Integration tests start the whole application over HTTP (MockMvc) against real pgvector and
-  MongoDB databases in Docker (Testcontainers):
-  - `RagFlowIntegrationTest`: upload → background indexing → retrieval → cited answer → delete.
-  - `AccessControlIntegrationTest`: sign-in, role checks, and a department-restricted document that
-    reaches only that department, including after its visibility or a user's department changes.
-  - `ConversationIntegrationTest`: follow-ups in one model call, saved history, and privacy between users.
-- The chat and embedding models are replaced by deterministic fakes, so the tests need Docker but
-  not Ollama.
+- **Unit tests**: date and amount parsing (English and French), quote verification, extraction
+  parsing, language detection, answer status parsing, call script, guide parsing, field mapping
+  rules, value assembly, PDF filling.
+- **Integration tests** run the whole application over HTTP against real PostgreSQL/pgvector and
+  MongoDB in Docker (Testcontainers), with deterministic fake models:
+  - `PolicyIntegrationTest`: verified facts, cited answers, unclear and not-in-policy answers,
+    French question with an English call script, follow-ups.
+  - `ClaimIntegrationTest`: guide with cited items and caching, the complete pre-fill → review →
+    download flow, mapping cache, and isolation between users.
+  - `ScannedDocumentIntegrationTest`: OCR of a scanned PDF and a receipt photo (skipped without Tesseract).
+  - `AccountIntegrationTest`: sign-in, sign-up, profile, and account deletion across both databases.
+
+## Principles
+
+1. ClaimPilot never signs or submits a claim. Declarations have legal weight; the member checks every
+   field and signs.
+2. It never logs in to insurer websites.
+3. It does not collect a social insurance number; bank details are left for the member.
+4. It explains what the policy says; it does not give insurance or legal advice.
+5. The public repository contains only fictional policies, receipts and forms.
 
 ## Roadmap
 
-- [x] **Phase 1** RAG with citations, document library, web UI
-- [x] **Phase 2** Authentication (JWT), departments and permission-aware retrieval; chat history in MongoDB
-- [ ] **Phase 3** Event-driven ingestion: S3 upload triggers AWS Lambda, API Gateway, Kafka events, audit log
-- [ ] **Phase 4** AI agent with tools (leave balance, IT tickets, room booking) and user confirmation for actions
-- [ ] **Phase 5** Redis caching and rate limiting, knowledge-gap report, retrieval evaluation, AWS deployment with Bedrock
-
-## Design decisions
-
-- **Local models first.** Ollama keeps development free and private. Spring AI abstracts the model
-  provider, so moving to Amazon Bedrock is a dependency and configuration change.
-- **pgvector instead of a separate vector database.** One PostgreSQL instance holds both business
-  data and embeddings, which keeps operations simple and allows SQL filters on metadata, which
-  permission-aware retrieval relies on.
-- **Filter during retrieval, not after.** Filtering the top results after the search would both
-  leak restricted text into the pipeline and return fewer than `top-k` passages. The department
-  filter is part of the vector query instead.
-- **MongoDB for conversations.** A conversation is always read and written as a whole and has no
-  fixed shape, so it is stored as one document with its messages embedded. Relational data (users,
-  departments, documents) stays in PostgreSQL.
-- **Follow-ups without an extra model call.** "And from the third year?" alone matches nothing
-  useful. Rewriting it with the model first would add a second model call, several seconds on a
-  local 8B model. Instead, the question is searched twice, alone and joined with the previous question, and the
-  results are merged by score; embedding lookups take milliseconds. The model then gets the last
-  turns as context and still has to take every fact from the sources.
-- **Fixed "not found" text.** The fallback answer is defined in code, not generated,
-  so it is predictable and testable.
-- **bge-m3 embeddings.** The demo is English only, but bge-m3 is multilingual, so French or other
-  languages can be added later without re-choosing the model or its 1024-dimension vector column.
+- [x] **Phase 1**: ask the policy (three outcomes, call kit), claim guide, pre-filled second-plan
+  claim form with sources, OCR, accounts and data isolation.
+- [ ] **Phase 2**: more claim types and form templates; encrypted file storage.
+- [ ] **Phase 3**: event-driven processing. S3 upload triggers AWS Lambda for OCR and extraction,
+  Kafka events update the claim draft and notify the user; audit log.
+- [ ] **Phase 4**: agent that recognizes the user's intent and chains questions, guide and form filling.
+- [ ] **Phase 5**: Redis for mapping and answer caches and rate limiting; accuracy evaluation set;
+  AWS deployment with Bedrock.
+- [ ] **Later**: coordination-of-benefits rules to decide which plan pays first automatically.

@@ -1,32 +1,43 @@
-export type DocumentStatus = 'UPLOADED' | 'PROCESSING' | 'INDEXED' | 'FAILED';
-export type Role = 'EMPLOYEE' | 'KNOWLEDGE_MANAGER' | 'ADMIN';
-
-export interface Department {
-  id: number;
-  code: string;
-  name: string;
-}
+export type DocumentStatus = 'UPLOADED' | 'PROCESSING' | 'READY' | 'FAILED';
+export type DocumentKind = 'POLICY' | 'RECEIPT';
+export type AnswerStatus = 'ANSWERED' | 'UNCLEAR' | 'NOT_IN_POLICY';
+export type ClaimType = 'SECONDARY_PARAMEDICAL' | 'SECONDARY_DENTAL' | 'SECONDARY_DRUGS';
+export type Relationship = 'SELF' | 'SPOUSE' | 'CHILD';
+export type SourceType =
+  | 'POLICY'
+  | 'OTHER_POLICY'
+  | 'RECEIPT'
+  | 'PROFILE'
+  | 'CLAIM_SETUP'
+  | 'CALCULATED'
+  | 'USER'
+  | 'MISSING';
 
 export interface User {
   id: number;
   username: string;
   displayName: string;
-  role: Role;
-  department: Department | null;
-  createdAt: string;
 }
 
-export interface KnowledgeDocument {
+export interface Fact {
+  key: string;
+  value: string;
+  quote: string | null;
+  page: number | null;
+  verified: boolean;
+}
+
+export interface UploadedDocument {
   id: string;
+  kind: DocumentKind;
   fileName: string;
   sizeBytes: number;
   status: DocumentStatus;
   chunkCount: number | null;
   errorMessage: string | null;
   createdAt: string;
-  indexedAt: string | null;
-  /** Empty means the whole company. */
-  visibleTo: Department[];
+  processedAt: string | null;
+  facts: Fact[];
 }
 
 export interface Citation {
@@ -39,33 +50,110 @@ export interface Citation {
   score: number | null;
 }
 
+export interface CallKitDetail {
+  label: string;
+  value: string;
+  page: number | null;
+  verified: boolean;
+}
+
+export interface CallKit {
+  insurerName: string | null;
+  phone: CallKitDetail | null;
+  hours: CallKitDetail | null;
+  details: CallKitDetail[];
+  script: string;
+}
+
 export interface ChatAnswer {
   answer: string;
-  grounded: boolean;
+  status: AnswerStatus;
+  language: 'en' | 'fr' | 'zh';
   citations: Citation[];
+  callKit: CallKit | null;
   latencyMs: number;
   conversationId: string;
+  policyId: string;
 }
 
 export interface ConversationSummary {
   id: string;
+  policyId: string;
   title: string;
   updatedAt: string;
 }
 
 export interface ChatMessage {
-  sender: 'EMPLOYEE' | 'ASSISTANT';
+  sender: 'MEMBER' | 'ASSISTANT';
   content: string;
-  grounded: boolean | null;
+  status: AnswerStatus | null;
   citations: Citation[];
+  callKit: CallKit | null;
   createdAt: string;
 }
 
 export interface Conversation {
   id: string;
+  policyId: string;
   title: string;
   updatedAt: string;
   messages: ChatMessage[];
+}
+
+export interface GuideItem {
+  text: string;
+  page: number | null;
+  section: string | null;
+  clause: string;
+}
+
+export interface ClaimGuide {
+  policyId: string;
+  claimType: ClaimType;
+  claimTypeLabel: string;
+  deadlines: GuideItem[];
+  documents: GuideItem[];
+  submission: GuideItem[];
+  coverage: GuideItem[];
+  preApproval: { required: 'YES' | 'NO' | 'UNKNOWN'; basis: GuideItem | null };
+  found: boolean;
+}
+
+export interface DraftField {
+  key: string;
+  label: string;
+  value: string | null;
+  sourceType: SourceType;
+  sourceLabel: string | null;
+  page: number | null;
+  quote: string | null;
+  verified: boolean;
+  reviewed: boolean;
+}
+
+export interface ClaimDraft {
+  id: string;
+  claimType: ClaimType;
+  claimTypeLabel: string;
+  policy: { id: string; fileName: string } | null;
+  otherPolicy: { id: string; fileName: string } | null;
+  receipt: { id: string; fileName: string } | null;
+  relationship: Relationship;
+  fields: DraftField[];
+  leftForYou: string[];
+  readyToDownload: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Profile {
+  fullName: string | null;
+  dateOfBirth: string | null;
+  street: string | null;
+  city: string | null;
+  province: string | null;
+  postalCode: string | null;
+  phone: string | null;
 }
 
 export interface LoginResponse {
@@ -74,23 +162,28 @@ export interface LoginResponse {
   user: User;
 }
 
-export interface UserInput {
-  username?: string;
-  displayName: string;
-  password?: string;
-  role: Role;
-  departmentId: number | null;
-}
-
-export const ROLE_LABELS: Record<Role, string> = {
-  EMPLOYEE: 'Employee',
-  KNOWLEDGE_MANAGER: 'Knowledge manager',
-  ADMIN: 'Admin',
+/** Readable names for the facts read from documents. */
+export const FACT_LABELS: Record<string, string> = {
+  INSURER_NAME: 'Insurer',
+  INSURER_PHONE: 'Phone',
+  INSURER_HOURS: 'Hours',
+  POLICY_NUMBER: 'Group policy number',
+  CERTIFICATE_NUMBER: 'Certificate number',
+  PLAN_MEMBER_NAME: 'Plan member',
+  PLAN_SPONSOR: 'Plan sponsor',
+  CLAIMS_ADDRESS: 'Claims address',
+  PROVIDER_NAME: 'Provider',
+  PATIENT_NAME: 'Patient',
+  SERVICE_DATE: 'Date of service',
+  SERVICE_TYPE: 'Service',
+  AMOUNT_CHARGED: 'Amount charged',
+  AMOUNT_PAID_BY_OTHER_PLAN: 'Paid by another plan',
+  RECEIPT_NUMBER: 'Receipt number',
 };
 
 // ---------- Session token ----------
 
-const TOKEN_KEY = 'companybrain.token';
+const TOKEN_KEY = 'claimpilot.token';
 let token: string | null = readStoredToken();
 let onUnauthorized: () => void = () => {};
 
@@ -123,7 +216,7 @@ export function setUnauthorizedHandler(handler: () => void) {
 
 // ---------- HTTP ----------
 
-async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
+async function send(url: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
   if (token) headers.set('Authorization', `Bearer ${token}`);
   const response = await fetch(url, { ...init, headers });
@@ -135,9 +228,14 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
     } catch {
       // body was not JSON
     }
-    if (response.status === 401 && url !== '/api/auth/login') onUnauthorized();
+    if (response.status === 401 && !url.startsWith('/api/auth/')) onUnauthorized();
     throw new Error(detail);
   }
+  return response;
+}
+
+async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
+  const response = await send(url, init);
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
 }
 
@@ -145,33 +243,62 @@ function json(method: string, body: unknown): RequestInit {
   return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
 }
 
+function uploadTo(collection: 'policies' | 'receipts', file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  return request<UploadedDocument>(`/api/${collection}`, { method: 'POST', body: form });
+}
+
 export const api = {
   login: (username: string, password: string) =>
     request<LoginResponse>('/api/auth/login', json('POST', { username, password })),
+  register: (username: string, displayName: string, password: string) =>
+    request<LoginResponse>('/api/auth/register', json('POST', { username, displayName, password })),
   me: () => request<User>('/api/auth/me'),
-  departments: () => request<Department[]>('/api/departments'),
 
-  ask: (question: string, conversationId: string | null) =>
-    request<ChatAnswer>('/api/chat', json('POST', { question, conversationId })),
+  policies: () => request<UploadedDocument[]>('/api/policies'),
+  uploadPolicy: (file: File) => uploadTo('policies', file),
+  deletePolicy: (id: string) => request<void>(`/api/policies/${id}`, { method: 'DELETE' }),
+  receipts: () => request<UploadedDocument[]>('/api/receipts'),
+  receipt: (id: string) => request<UploadedDocument>(`/api/receipts/${id}`),
+  uploadReceipt: (file: File) => uploadTo('receipts', file),
+  deleteReceipt: (id: string) => request<void>(`/api/receipts/${id}`, { method: 'DELETE' }),
+
+  ask: (question: string, policyId: string, conversationId: string | null) =>
+    request<ChatAnswer>('/api/chat', json('POST', { question, policyId, conversationId })),
   conversations: () => request<ConversationSummary[]>('/api/conversations'),
   conversation: (id: string) => request<Conversation>(`/api/conversations/${id}`),
   deleteConversation: (id: string) => request<void>(`/api/conversations/${id}`, { method: 'DELETE' }),
 
-  listDocuments: () => request<KnowledgeDocument[]>('/api/documents'),
-  uploadDocument: (file: File, departmentIds: number[]) => {
-    const form = new FormData();
-    form.append('file', file);
-    departmentIds.forEach((id) => form.append('departmentIds', String(id)));
-    return request<KnowledgeDocument>('/api/documents', { method: 'POST', body: form });
+  claimTypes: () => request<{ type: ClaimType; label: string }[]>('/api/claims/types'),
+  guide: (policyId: string, type: ClaimType) =>
+    request<ClaimGuide>(`/api/claims/guide?policyId=${policyId}&type=${type}`),
+  drafts: () => request<ClaimDraft[]>('/api/claims'),
+  draft: (id: string) => request<ClaimDraft>(`/api/claims/${id}`),
+  createDraft: (body: {
+    claimType: ClaimType;
+    policyId: string;
+    otherPolicyId: string | null;
+    receiptId: string | null;
+    relationship: Relationship;
+  }) => request<ClaimDraft>('/api/claims', json('POST', body)),
+  updateField: (id: string, key: string, change: { value?: string; reviewed?: boolean }) =>
+    request<ClaimDraft>(`/api/claims/${id}/fields/${key}`, json('PATCH', change)),
+  deleteDraft: (id: string) => request<void>(`/api/claims/${id}`, { method: 'DELETE' }),
+  /** Downloads the filled PDF through the browser. */
+  downloadPdf: async (id: string) => {
+    const response = await send(`/api/claims/${id}/pdf`);
+    const disposition = response.headers.get('Content-Disposition') ?? '';
+    const name = /filename="?([^";]+)"?/.exec(disposition)?.[1] ?? 'claim.pdf';
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name;
+    link.click();
+    URL.revokeObjectURL(url);
   },
-  setVisibility: (id: string, departmentIds: number[]) =>
-    request<KnowledgeDocument>(`/api/documents/${id}/visibility`, json('PUT', { departmentIds })),
-  deleteDocument: (id: string) => request<void>(`/api/documents/${id}`, { method: 'DELETE' }),
 
-  users: () => request<User[]>('/api/admin/users'),
-  createUser: (input: UserInput) => request<User>('/api/admin/users', json('POST', input)),
-  updateUser: (id: number, input: UserInput) => request<User>(`/api/admin/users/${id}`, json('PUT', input)),
-  deleteUser: (id: number) => request<void>(`/api/admin/users/${id}`, { method: 'DELETE' }),
-  createDepartment: (code: string, name: string) =>
-    request<Department>('/api/admin/departments', json('POST', { code, name })),
+  profile: () => request<Profile>('/api/profile'),
+  saveProfile: (profile: Profile) => request<Profile>('/api/profile', json('PUT', profile)),
+  deleteAccount: () => request<void>('/api/account', { method: 'DELETE' }),
 };
