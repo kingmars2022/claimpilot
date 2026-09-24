@@ -63,6 +63,14 @@ Each field shows its source (document, page and quote). Values the code could no
 document are flagged *check*. The filled PDF can only be downloaded once every field has been
 checked, and it stays editable. Claim types: paramedical care, dental, prescription drugs, vision.
 
+### Which plan pays first
+With two plans in the family, ClaimPilot decides the order itself, in code, following the Canadian
+(CLHIA) coordination of benefits guidelines: the patient's own plan pays first and the plan where they
+are a dependent pays second; for a child, the plan of the parent whose birthday comes first in the year.
+On the claim page, *Who is the claim for?* fills in the plan that paid first, the plan to claim the
+balance on and the relationship, with the rule that decided it. Cases the rules do not settle (two plans
+of one person, separated parents, missing birthdays) are shown as such, never guessed.
+
 ### 4. Assistant
 Describe the situation once, in any language: *"My physio cost $120 and my plan paid $84, can I claim
 the rest on my husband's plan?"* The assistant plans the steps (answer from the policy, show the claim
@@ -206,6 +214,7 @@ runs on a laptop with two containers and scales out without code changes:
 |---|---|---|
 | *(default)* | Files on disk, processing on a background thread, cache in memory, Ollama | `docker compose up -d` |
 | `events` | Files in an S3 bucket; uploads and results travel as Kafka events to a separate worker | `docker compose --profile events up -d` (Kafka, RustFS) |
+| `sqs` | The AWS design: each stored file sends an S3 "object created" notification through an SQS queue to the worker | `docker compose --profile events --profile sqs up -d` (RustFS, ElasticMQ) |
 | `cache` | Model replies and rate limits shared across servers in Redis | `docker compose --profile cache up -d` |
 | `aws` | Amazon Bedrock (Claude, Titan embeddings), Amazon S3, RDS; secrets from the environment | an AWS account, see [docs/deploy-aws.md](docs/deploy-aws.md) (paid) |
 
@@ -271,7 +280,8 @@ The files are in `sample-docs/`. All companies and people are fictional.
      is typically marked unclear and shows the clause.
    - *我的保险报销针灸吗？* (acupuncture is not in the policy) → a reply in Chinese with a call kit and an
      English script.
-3. **Claim**: choose *Paramedical care*, claim on Cedarview, paid first by Harbourline. The guide shows
+3. **Claim**: under *Who is the claim for?* choose *Me*: ClaimPilot applies the coordination of benefits
+   rules and fills in claim on Cedarview, paid first by Harbourline. Choose *Paramedical care*. The guide shows
    the 12-month deadline and the documents to send. Upload `physio-receipt-2026-03-05.png`.
 4. **Fill in the claim form**: every field shows its source; the amount claimed is $120.00 − $84.00 =
    $36.00. Check each field, then download the PDF. Signature and declaration are blank. To try your
@@ -308,6 +318,7 @@ scoped to the signed-in user; another user's ids return 404.
 | `GET` | `/api/notifications` | Recent notifications. |
 | `POST` / `GET` | `/api/notifications/ticket`, `/api/notifications/stream?access_token=` | A one-minute ticket, then the live stream (Server-Sent Events). The ticket opens nothing else, and a session token is never accepted in a URL. |
 | `GET` | `/api/audit` | Your activity log, newest first. |
+| `GET` | `/api/claims/coordination?patient=ME\|SPOUSE\|CHILD` | Which plan pays first and which to claim the balance on, with the rule applied. |
 
 Errors follow RFC 9457 (`application/problem+json`). Requests that use the model are limited per user
 (default 20 per minute), and sign-in and sign-up per client address and per username (default 10 per
@@ -337,13 +348,19 @@ cd backend
     another user's form refused.
   - `EventDrivenIntegrationTest`: with real Kafka and an S3 server, an upload is stored encrypted,
     processed by the worker and comes back as a notification.
-  - `AssistantIntegrationTest`: a question back, then guide and pre-filled form from one message.
+  - `AssistantIntegrationTest`: a question back, then guide and pre-filled form from one message; a
+    claim planned on the plan that pays first is moved to the plan that pays second.
+  - `SqsIntegrationTest`: with a real SQS-compatible queue, an upload is processed from its S3-style
+    "object created" notification.
 
 ### Accuracy evaluation
 
-`backend/src/test/resources/eval/cases.json` holds 17 questions (English, French, Chinese; answered,
-unclear and not-in-policy cases) and 13 facts to extract from the sample documents. With Ollama
-running:
+`backend/src/test/resources/eval/cases.json` holds 29 questions (English, French, Chinese; answered,
+unclear and not-in-policy cases) and 18 facts to extract from four fictional documents, including a
+five-page booklet laid out like real ones (definitions, a coverage table, dental waiting periods,
+exclusions). To measure ClaimPilot on **your own real policies** without committing them, add them
+with their questions under `sample-docs/private/eval/`: see [docs/evaluation.md](docs/evaluation.md).
+With Ollama running:
 
 ```bash
 cd backend
@@ -388,5 +405,7 @@ side, and the answer still cites the right clause.
 - [x] **Phase 4**: assistant that plans from one message and chains answer, claim rules and form filling.
 - [x] **Phase 5**: model reply cache and per-user rate limits (memory or Redis), accuracy evaluation
   set, Bedrock profile, Dockerfiles and an AWS deployment guide (not deployed: it is paid).
-- [ ] **Next**: run the evaluation on more real-world policies; S3 events through SQS on AWS;
-  coordination-of-benefits rules to decide which plan pays first automatically.
+- [x] **Next**: evaluation on a booklet laid out like real ones and on the member's own private
+  policies; S3 events through SQS (the AWS design, ElasticMQ locally); coordination-of-benefits rules
+  that decide which plan pays first.
+- [ ] **Later**: separated-parents (custody) rules; more insurers' claim forms out of the box.

@@ -50,6 +50,7 @@ public final class SampleDocuments {
     public static final String RECEIPT_PNG = "physio-receipt-2026-03-05.png";
     public static final String CLAIM_FORM = "cedarview-secondary-claim-form.pdf";
     public static final String FRENCH_CLAIM_FORM = "harbourline-demande-de-remboursement.pdf";
+    public static final String BOOKLET_POLICY = "northgate-benefits-booklet-daniel-okafor.pdf";
     public static final String SPOUSE_POLICY_SCANNED = "cedarview-policy-marc-gagnon-scanned.pdf";
     public static final String RECEIPT_SCANNED = "physio-receipt-2026-03-05-scanned.pdf";
 
@@ -67,6 +68,7 @@ public final class SampleDocuments {
         Files.createDirectories(samples);
         Files.write(samples.resolve(SPOUSE_POLICY), spousePolicy());
         Files.write(samples.resolve(OWN_POLICY), ownPolicyFrench());
+        Files.write(samples.resolve(BOOKLET_POLICY), bookletPolicy());
         Files.write(samples.resolve(RECEIPT_PDF), receiptPdf());
         Files.write(samples.resolve(RECEIPT_PNG), receiptPng());
         Files.write(samples.resolve(SPOUSE_POLICY_SCANNED), scanned(spousePolicy()));
@@ -137,6 +139,70 @@ public final class SampleDocuments {
                         p("To claim the balance under this plan, submit the claim with the Explanation of Benefits (claim "
                                 + "statement) from the first plan, or a receipt showing the amount the first plan paid by "
                                 + "direct billing. The second claim must also be received within 12 months of the date of service."))));
+    }
+
+    /**
+     * A longer booklet laid out like real ones: definitions, a coverage table, dental rules with a
+     * waiting period, exclusions and claim rules on separate pages. Used by the accuracy evaluation.
+     */
+    public static byte[] bookletPolicy() {
+        return textPdf(List.of(
+                List.of(
+                        h("NORTHGATE LIFE"),
+                        p("Group Benefits Booklet"),
+                        note("Fictional document created for a software demonstration. Northgate Life is not a real company."),
+                        gap(),
+                        h2("Your plan"),
+                        p("Plan sponsor: Laurentide Software Inc."),
+                        p("Group policy number: NG-55012"),
+                        p("Plan member: Daniel Okafor"),
+                        p("Certificate number: 90127745"),
+                        p("Class: all active full-time employees working at least 25 hours a week"),
+                        gap(),
+                        h2("Contact us"),
+                        p("Member Services: 1-877-555-0144"),
+                        p("Hours: Monday to Friday, 8:30 a.m. to 6 p.m. (Eastern Time)"),
+                        p("Mail: Northgate Life, Group Claims, 900 boulevard Rene-Levesque Ouest, Montreal, QC H3B 4W8")),
+                List.of(
+                        h2("Section 1 - Definitions"),
+                        p("Spouse: the person to whom the member is married, or a person of either sex who has lived with "
+                                + "the member in a conjugal relationship for at least 12 months."),
+                        p("Dependent child: an unmarried child of the member or spouse who is under 21 years of age, or "
+                                + "under 25 years of age while attending school full time."),
+                        p("Reasonable and customary: the usual charge for a service in the area where it is provided. "
+                                + "Amounts above it are not reimbursed."),
+                        p("Calendar year: January 1 to December 31.")),
+                List.of(
+                        h2("Section 2 - Health benefits"),
+                        p("Benefit | Reimbursement | Maximum"),
+                        p("Physiotherapist | 80% | $500 per calendar year per person"),
+                        p("Psychologist or social worker | 100% | $1,000 per calendar year per person"),
+                        p("Massage therapist | 80% | $300 per calendar year per person; a physician's referral is required"),
+                        p("Vision care (glasses or contact lenses) | 100% | $250 every 24 months per person"),
+                        p("Eye examination | 100% | one exam every 24 months per person"),
+                        p("Prescription drugs | 80% | reimbursement is based on the lowest-cost generic equivalent, even "
+                                + "when a brand-name drug is dispensed"),
+                        p("Emergency care outside Canada | 100% | $1,000,000 lifetime; trips of up to 60 days")),
+                List.of(
+                        h2("Section 3 - Dental care"),
+                        p("Basic services (exams, cleanings, fillings) are reimbursed at 80%. One recall exam every 9 months."),
+                        p("Major services (crowns, bridges, dentures) are reimbursed at 50%, up to $1,500 per calendar "
+                                + "year per person, after 12 months of continuous coverage."),
+                        p("Orthodontic treatment is not covered."),
+                        p("For any treatment plan over $1,000, submit a predetermination before treatment begins.")),
+                List.of(
+                        h2("Section 4 - Exclusions"),
+                        p("The plan does not cover: cosmetic procedures; services covered by a provincial health "
+                                + "insurance plan; expenses incurred before coverage began; injuries resulting from war "
+                                + "or participation in a riot."),
+                        gap(),
+                        h2("Section 5 - Claims"),
+                        p("Submit claims within 90 days after the end of the calendar year in which the expense was "
+                                + "incurred."),
+                        p("Submit in the Northgate app, or mail the claim form with original receipts to the address "
+                                + "on page 1."),
+                        p("When a person is covered by two plans, benefits are coordinated according to the "
+                                + "guidelines of the Canadian Life and Health Insurance Association."))));
     }
 
     /** Fiona Tremblay's own plan, in French: the plan that pays first. */
