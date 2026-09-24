@@ -28,10 +28,15 @@ const SOURCE_LABELS: Record<SourceType, string> = {
   MISSING: 'Missing',
 };
 
-export default function ClaimView() {
+export default function ClaimView({ openDraftId }: { openDraftId?: string | null }) {
   const [drafts, setDrafts] = useState<ClaimDraft[]>([]);
   const [open, setOpen] = useState<ClaimDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!openDraftId) return;
+    api.draft(openDraftId).then(setOpen, (err) => setError(errorText(err)));
+  }, [openDraftId]);
 
   const refresh = useCallback(async () => {
     try {
@@ -320,7 +325,7 @@ function NewClaim({ onCreated }: { onCreated: (draft: ClaimDraft) => void }) {
   );
 }
 
-function GuideView({ guide }: { guide: ClaimGuide }) {
+export function GuideView({ guide }: { guide: ClaimGuide }) {
   const [done, setDone] = useState<Set<number>>(new Set());
   if (!guide.found) {
     return <p className="notice">This policy does not describe how to claim for this type of care. Call your insurer.</p>;

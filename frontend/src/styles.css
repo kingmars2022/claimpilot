@@ -1365,3 +1365,138 @@ code {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+/* ---------- Assistant ---------- */
+
+.assistant .exchanges {
+  list-style: none;
+  margin: 1rem auto 0;
+  padding: 0;
+  display: grid;
+  gap: 1.5rem;
+}
+
+.exchange-message {
+  justify-self: end;
+  margin: 0 0 0.75rem auto;
+  max-width: 40rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--spruce-soft);
+  width: fit-content;
+}
+
+.assistant-reply {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.plan {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: plan;
+}
+
+.plan li {
+  counter-increment: plan;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 0.8rem;
+}
+
+.plan li::before {
+  content: counter(plan) '. ';
+  color: var(--muted);
+}
+
+.summary {
+  margin: 0;
+  font-weight: 500;
+}
+
+.step-card {
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.step-card h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.step-card .answer-text {
+  margin: 0.25rem 0 0.75rem;
+  font-family: var(--serif);
+  line-height: 1.55;
+}
+
+.status-line {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--spruce);
+}
+
+.status-line[data-status='UNCLEAR'] {
+  color: var(--warn);
+}
+
+.status-line[data-status='NOT_IN_POLICY'] {
+  color: var(--danger);
+}
+
+.mini-sources {
+  margin: 0 0 0.75rem;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.choices button {
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--spruce);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--spruce);
+}
+
+.latency {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.assistant-form {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin-top: 1.5rem;
+  padding: 0.75rem 0;
+  background: var(--paper);
+}
+
+.assistant-form textarea {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+}

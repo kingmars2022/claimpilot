@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import { useSession } from './auth';
 import AskView from './components/AskView';
+import AssistantView from './components/AssistantView';
 import ClaimView from './components/ClaimView';
 import DocumentsView from './components/DocumentsView';
 import LoginView from './components/LoginView';
 import Notifications from './components/Notifications';
 import ProfileView from './components/ProfileView';
 
-type View = 'ask' | 'claim' | 'documents' | 'profile';
+type View = 'assistant' | 'ask' | 'claim' | 'documents' | 'profile';
 
 const TABS: { view: View; label: string }[] = [
+  { view: 'assistant', label: 'Assistant' },
   { view: 'ask', label: 'Ask' },
   { view: 'claim', label: 'Claim' },
   { view: 'documents', label: 'My documents' },
@@ -19,6 +21,7 @@ const TABS: { view: View; label: string }[] = [
 export default function App() {
   const { user, restoring, signOut } = useSession();
   const [view, setView] = useState<View>('ask');
+  const [openDraftId, setOpenDraftId] = useState<string | null>(null);
 
   if (restoring) return null;
   if (!user) return <LoginView />;
@@ -34,7 +37,10 @@ export default function App() {
               type="button"
               className="tab"
               aria-current={view === tab.view ? 'page' : undefined}
-              onClick={() => setView(tab.view)}
+              onClick={() => {
+                setOpenDraftId(null);
+                setView(tab.view);
+              }}
             >
               {tab.label}
             </button>
@@ -49,8 +55,17 @@ export default function App() {
       </header>
 
       <main className="main">
+        {view === 'assistant' && (
+          <AssistantView
+            key={user.id}
+            onOpenClaim={(draftId) => {
+              setOpenDraftId(draftId);
+              setView('claim');
+            }}
+          />
+        )}
         {view === 'ask' && <AskView key={user.id} />}
-        {view === 'claim' && <ClaimView key={user.id} />}
+        {view === 'claim' && <ClaimView key={`${user.id}-${openDraftId ?? ''}`} openDraftId={openDraftId} />}
         {view === 'documents' && <DocumentsView />}
         {view === 'profile' && <ProfileView />}
       </main>

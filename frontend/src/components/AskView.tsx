@@ -350,7 +350,7 @@ export default function AskView() {
 }
 
 /** What to have ready and what to say when calling the insurer. */
-function CallKitCard({ kit }: { kit: CallKit }) {
+export function CallKitCard({ kit }: { kit: CallKit }) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {

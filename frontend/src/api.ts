@@ -175,6 +175,25 @@ export interface ActivityEntry {
   at: string;
 }
 
+export type AssistantAction = 'ASK' | 'GUIDE' | 'FILL';
+
+export interface AssistantStep {
+  type: 'ANSWER' | 'GUIDE' | 'CLAIM' | 'CLARIFY' | 'MESSAGE';
+  title: string;
+  answer: ChatAnswer | null;
+  guide: ClaimGuide | null;
+  draft: ClaimDraft | null;
+  clarify: { question: string; field: 'policyId' | 'claimType' | null; options: { label: string; value: string }[] } | null;
+  text: string | null;
+}
+
+export interface AssistantReply {
+  summary: string;
+  actions: AssistantAction[];
+  steps: AssistantStep[];
+  latencyMs: number;
+}
+
 export interface Profile {
   fullName: string | null;
   dateOfBirth: string | null;
@@ -335,6 +354,9 @@ export const api = {
     link.click();
     URL.revokeObjectURL(url);
   },
+
+  assistant: (message: string, choice: { policyId?: string; claimType?: string } = {}) =>
+    request<AssistantReply>('/api/assistant', json('POST', { message, ...choice })),
 
   notifications: () => request<AppNotification[]>('/api/notifications'),
   activity: () => request<ActivityEntry[]>('/api/audit'),

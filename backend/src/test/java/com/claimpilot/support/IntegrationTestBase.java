@@ -201,14 +201,18 @@ public abstract class IntegrationTestBase {
      */
     public static class FakeChatModel implements ChatModel {
 
-        public enum Kind { EXTRACT_POLICY, EXTRACT_RECEIPT, MAP_FORM, GUIDE, ANSWER, TRANSLATE }
+        public enum Kind { EXTRACT_POLICY, EXTRACT_RECEIPT, MAP_FORM, GUIDE, ANSWER, TRANSLATE, PLAN }
 
         public final Map<Kind, List<String>> prompts = new java.util.concurrent.ConcurrentHashMap<>();
         /** Reply to the next question; set by a test. */
         public volatile String nextAnswer = "STATUS: ANSWERED\nPhysiotherapy is reimbursed at 80%, up to $600 a year [1].";
 
+        /** The assistant's plan for the next message; set by a test. */
+        public volatile String nextPlan = "{\"steps\": []}";
+
         void reset() {
             prompts.clear();
+            nextPlan = "{\"steps\": []}";
             nextAnswer = "STATUS: ANSWERED\nPhysiotherapy is reimbursed at 80%, up to $600 a year [1].";
         }
 
@@ -229,11 +233,15 @@ public abstract class IntegrationTestBase {
                 case GUIDE -> GUIDE;
                 case ANSWER -> nextAnswer;
                 case TRANSLATE -> "Is physiotherapy covered by my plan?";
+                case PLAN -> nextPlan;
             };
             return new ChatResponse(List.of(new Generation(new AssistantMessage(reply))));
         }
 
         private static Kind kindOf(String text) {
+            if (text.contains("Plan the steps for this message")) {
+                return Kind.PLAN;
+            }
             if (text.contains("Form fields (name: label)")) {
                 return Kind.MAP_FORM;
             }
