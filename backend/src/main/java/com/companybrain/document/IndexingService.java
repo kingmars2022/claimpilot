@@ -35,7 +35,7 @@ public class IndexingService {
     private final FileStorage storage;
     private final DocumentReaderFactory readerFactory;
     private final VectorStore vectorStore;
-    private final TokenTextSplitter splitter = new TokenTextSplitter();
+    private final TokenTextSplitter splitter = TokenTextSplitter.builder().build();
 
     public IndexingService(DocumentRepository repository, FileStorage storage,
                            DocumentReaderFactory readerFactory, VectorStore vectorStore) {
