@@ -9,7 +9,9 @@ deadlines and documents *your* policy requires, then pre-fills the claim form fr
 your receipt and your profile, showing where every value came from. You check each field, sign and
 submit the form yourself.
 
-<!-- Screenshot: add docs/screenshot.png showing the claim review page. -->
+<p align="center">
+  <img src="docs/screenshots/claim-review.png" alt="Pre-filled claim form: each field shows its value, the document, page and quote it came from, and a box to check it" width="720">
+</p>
 
 ## Why
 
@@ -58,6 +60,73 @@ The demo form is a fictional second-plan ("supplementary") health claim:
 Each field shows its source (document, page and quote). Values the code could not confirm in the
 document are flagged *check*. The filled PDF can only be downloaded once every field has been
 checked, and it stays editable.
+
+## Walkthrough
+
+These screenshots come from a local run with the fictional sample documents: Fiona's own plan
+(a French policy, Harbourline Vie) and a photo of a physiotherapy receipt.
+
+### 1. Upload: the key details are read and checked
+
+<img src="docs/screenshots/documents.png" alt="My documents: a French policy and a receipt photo with their key details and page numbers" width="720">
+
+1. The file is stored and processed in the background, so the upload returns at once and the card
+   switches from *Processing* to *Ready*.
+2. Text is read page by page with PDFBox. A page with almost no text (a scan) or a photo goes through
+   Tesseract OCR instead, so the receipt above was read from a PNG.
+3. The model is asked for each key detail **and the exact quote it came from**.
+4. Code then searches for that quote in the page text, records the page, and checks the value really
+   appears in the quote (dates and amounts are parsed in English and French). Every detail shows its
+   page (`p. 1`). In this run the model returned the office hours translated into English; that text is
+   not in the French policy, so the code could not confirm it and marked it **CHECK** instead of
+   trusting it.
+
+### 2. Ask: answered with a page, or a call kit
+
+<img src="docs/screenshots/ask.png" alt="Ask: an answer citing the policy, and a call kit for a question the policy does not answer" width="560">
+
+1. The question is embedded (bge-m3) and searched in pgvector, **filtered to this user and this
+   policy**. Because bge-m3 is multilingual, an English question finds the French clause.
+2. The best clauses go to the model with their page numbers, and it must reply with a status:
+   answered, unclear or not in the policy.
+3. *How much does my plan pay for physiotherapy?* is answered in English from the French text and
+   cites the clause (`1` opens it in the Sources panel: page 2).
+4. *Are kinesiologist treatments covered?* The Harbourline policy never mentions it, so instead of a
+   guess the reply is a **call kit**: the insurer's number and hours, the policy and certificate
+   numbers (each with its page) and a script to read. An answer marked "answered" without a citation
+   would be downgraded by code to "unclear".
+
+### 3. Claim guide: what this policy requires
+
+<img src="docs/screenshots/claim-guide.png" alt="Claim guide: deadlines, approval, documents, how to submit and what the plan pays, each with its page" width="720">
+
+For the chosen claim type the policy is searched with a few fixed queries (deadlines, documents,
+submission, coverage, prior approval) and the model sorts what it finds into these boxes. Each item
+keeps the policy's own words and page; an item that does not point to a real clause is dropped by
+code. Deadlines are highlighted because missing one loses the claim. The guide is cached per policy
+and claim type.
+
+### 4. The pre-filled claim form
+
+Shown at the top of this page. When the claim is started:
+
+1. **Field mapping.** The PDF form's fields have meaningless names (`txtField_07`). The model maps
+   each field's label to a known data item once; the mapping is saved per form version (SHA-256) and
+   reused, so later claims make no model call for it.
+2. **Values.** Each item is taken from one source, and the source is shown next to it:
+   - **Policy**: plan member, policy number and employer, with the quote and page;
+   - **Profile**: patient name, date of birth, address;
+   - **Receipt**: provider, date, service, amounts, with the quote read from the photo;
+   - **Your choice**: the relationship picked when the claim was started;
+   - **Calculated**: amount claimed = 120.00 charged − 84.00 paid by the other plan = **36.00**.
+3. **Missing** values are shown in red rather than invented. Here no first-paying plan was selected,
+   so the other plan's insurer and policy number are left to fill in.
+4. **Left for you to complete.** Signature, declaration, date signed and bank details are never
+   filled, even if the model maps a field to them: code forces them blank. (The two certificate numbers
+   in this list were caught by that rule by mistake when the screenshot was taken; it has been fixed
+   and they are now filled from the policies.)
+5. **Review.** *Download filled PDF* stays disabled until every field is checked (0 of 15 here). PDFBox
+   then writes the values into the form, which stays editable; the member signs and sends it.
 
 ## How the AI is kept honest
 
