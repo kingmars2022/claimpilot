@@ -198,6 +198,9 @@ function NewClaim({ onCreated }: { onCreated: (draft: ClaimDraft) => void }) {
                   </option>
                 ))}
             </select>
+            {policyId && readyPolicies.length < 2 && (
+              <span className="field-hint">Add the plan that paid first under My documents to choose it here.</span>
+            )}
           </label>
           <label>
             Who received the care
@@ -264,6 +267,12 @@ function NewClaim({ onCreated }: { onCreated: (draft: ClaimDraft) => void }) {
         <p className="muted small">
           Fills the plan's second-payer claim form. Signature, declaration and bank details are always left for you.
         </p>
+        {policyId && (!otherPolicyId || !receiptId) && (
+          <p className="field-hint">
+            {!receiptId && 'No receipt chosen: the provider, date and amounts will be left empty. '}
+            {!otherPolicyId && 'No plan that paid first: its insurer and numbers will be left empty.'}
+          </p>
+        )}
         {error && <p className="error">{error}</p>}
         <button type="button" className="primary" disabled={!policyId || busy} onClick={() => void create()}>
           {busy ? 'Filling in the form…' : 'Fill in the claim form'}
@@ -426,6 +435,12 @@ function DraftReview({
           Download filled PDF
         </button>
       </div>
+      {!draft.readyToDownload && (
+        <p className="field-hint">
+          Tick each field once you have checked it; the PDF can be downloaded when all are ticked. An empty field can be
+          filled in here, or ticked and completed on the PDF.
+        </p>
+      )}
       {error && <p className="error">{error}</p>}
 
       <div className="table-wrap">
