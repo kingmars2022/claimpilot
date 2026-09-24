@@ -37,16 +37,16 @@ public class ClaimDraftService {
     private final DocumentFactRepository facts;
     private final ProfileRepository profiles;
     private final FieldMappingService mappings;
-    private final FormTemplate form;
+    private final FormCatalog forms;
 
     public ClaimDraftService(ClaimDraftRepository drafts, DocumentService documents, DocumentFactRepository facts,
-                             ProfileRepository profiles, FieldMappingService mappings, FormTemplate form) {
+                             ProfileRepository profiles, FieldMappingService mappings, FormCatalog forms) {
         this.drafts = drafts;
         this.documents = documents;
         this.facts = facts;
         this.profiles = profiles;
         this.mappings = mappings;
-        this.form = form;
+        this.forms = forms;
     }
 
     @Transactional
@@ -60,25 +60,28 @@ public class ClaimDraftService {
         UploadedDocument receipt = request.receiptId() == null ? null
                 : ready(user, DocumentKind.RECEIPT, request.receiptId());
         Profile profile = profiles.findById(user.getId()).orElse(null);
+        String formKey = request.formKey() == null || request.formKey().isBlank()
+                ? FormCatalog.DEFAULT_KEY : request.formKey();
+        FormTemplate form = forms.resolve(user, formKey);
 
         Map<DataKey, DraftValue> values = ClaimValueAssembler.assemble(source(policy), source(other),
                 source(receipt), profile, request.relationship());
 
         ClaimDraft draft = new ClaimDraft(user.getId(), request.claimType(), policy.getId(),
                 other == null ? null : other.getId(), receipt == null ? null : receipt.getId(),
-                request.relationship());
-        for (DataKey key : fieldsOnForm()) {
+                request.relationship(), formKey);
+        for (DataKey key : fieldsOnForm(form)) {
             draft.addField(key, values.getOrDefault(key, DraftValue.missing()));
         }
-        return toDto(drafts.save(draft));
+        return toDto(user, drafts.save(draft));
     }
 
     public List<ClaimDtos.Draft> list(AppUser user) {
-        return drafts.findByOwnerIdOrderByUpdatedAtDesc(user.getId()).stream().map(this::toDto).toList();
+        return drafts.findByOwnerIdOrderByUpdatedAtDesc(user.getId()).stream().map(d -> toDto(user, d)).toList();
     }
 
     public ClaimDtos.Draft get(AppUser user, UUID id) {
-        return toDto(find(user, id));
+        return toDto(user, find(user, id));
     }
 
     @Transactional
@@ -93,7 +96,7 @@ public class ClaimDraftService {
             field.setReviewed(request.reviewed());
         }
         draft.touch();
-        return toDto(draft);
+        return toDto(user, draft);
     }
 
     /** The filled PDF. Refused until the member has reviewed every field. */
@@ -104,6 +107,7 @@ public class ClaimDraftService {
         }
         Map<DataKey, String> values = new EnumMap<>(DataKey.class);
         draft.getFields().forEach(f -> values.put(f.getDataKey(), f.getValue()));
+        FormTemplate form = forms.resolve(user, draft.getFormKey());
         return PdfFormFiller.fill(form, mappings.mappingFor(form), values);
     }
 
@@ -119,14 +123,20 @@ public class ClaimDraftService {
     }
 
     /** The data items this form asks for, in form order, excluding items left for the member. */
-    private Set<DataKey> fieldsOnForm() {
+    private Set<DataKey> fieldsOnForm(FormTemplate form) {
         Set<DataKey> keys = new LinkedHashSet<>();
         mappings.mappingFor(form).values().stream().filter(k -> !k.neverFill()).forEach(keys::add);
         return keys;
     }
 
     /** Labels of the form fields the member must complete personally. */
-    private List<String> leftForYou() {
+    private List<String> leftForYou(AppUser user, ClaimDraft draft) {
+        FormTemplate form;
+        try {
+            form = forms.resolve(user, draft.getFormKey());
+        } catch (NotFoundException | IllegalArgumentException ex) {
+            return List.of();
+        }
         Map<String, DataKey> mapping = mappings.mappingFor(form);
         return form.fields().stream()
                 .filter(f -> mapping.getOrDefault(f.name(), DataKey.NONE).neverFill())
@@ -156,12 +166,13 @@ public class ClaimDraftService {
         return new ClaimValueAssembler.Source(doc.getId(), doc.getFileName(), byKey);
     }
 
-    private ClaimDtos.Draft toDto(ClaimDraft draft) {
+    private ClaimDtos.Draft toDto(AppUser user, ClaimDraft draft) {
         return new ClaimDtos.Draft(draft.getId(), draft.getClaimType(), draft.getClaimType().label(),
                 ref(draft.getPolicyId()), ref(draft.getOtherPolicyId()), ref(draft.getReceiptId()),
+                new ClaimDtos.FormRef(draft.getFormKey(), forms.name(user, draft.getFormKey())),
                 draft.getRelationship(),
                 draft.getFields().stream().map(ClaimDtos.Field::from).toList(),
-                leftForYou(), draft.fullyReviewed(), draft.getCreatedAt(), draft.getUpdatedAt());
+                leftForYou(user, draft), draft.fullyReviewed(), draft.getCreatedAt(), draft.getUpdatedAt());
     }
 
     private ClaimDtos.DocumentRef ref(UUID id) {

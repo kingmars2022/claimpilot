@@ -11,7 +11,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record AppProperties(Storage storage, Indexing indexing, Retrieval retrieval, Security security,
                             Conversation conversation, Ocr ocr) {
 
-    public record Storage(String localRoot) {
+    /**
+     * @param localRoot     folder for uploaded files when they are kept on the local disk
+     * @param encryptionKey base64 AES-256 key; files are encrypted at rest when it is set
+     */
+    public record Storage(String localRoot, String encryptionKey) {
     }
 
     /**

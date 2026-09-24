@@ -43,6 +43,9 @@ spring:
 claimpilot:
   storage:
     local-root: ./data/uploads
+    # AES-256 key (base64, 32 bytes) for encrypting uploads at rest. Development default only:
+    # set CLAIMPILOT_STORAGE_ENCRYPTION_KEY anywhere else (openssl rand -base64 32).
+    encryption-key: ${CLAIMPILOT_STORAGE_ENCRYPTION_KEY:ZGV2LW9ubHktZmlsZS1rZXktY2hhbmdlLW1lLTAxMjM=}
   indexing:
     chunk-size: 300          # tokens per chunk; Markdown is first split at headings
   retrieval:

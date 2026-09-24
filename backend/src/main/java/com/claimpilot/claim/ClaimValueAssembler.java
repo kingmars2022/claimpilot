@@ -16,8 +16,10 @@ import com.claimpilot.user.Profile;
  * <pre>
  * plan member, policy, certificate, sponsor  from the plan being claimed on (usually the spouse's)
  * other insurer, policy, certificate         from the plan that paid first (usually the member's own)
- * provider, date, service, amounts           from the receipt
- * patient name, date of birth, address       from the profile
+ * provider, date, service, receipt number,   from the receipt
+ *   amounts
+ * patient name, date of birth, address,      from the profile
+ *   phone
  * relationship                               from the claim setup
  * amount claimed                             calculated: charged minus paid by the other plan
  * </pre>
@@ -51,6 +53,7 @@ public final class ClaimValueAssembler {
         values.put(DataKey.PROVIDER_NAME, fromFact(receipt, FactKey.PROVIDER_NAME, SourceType.RECEIPT));
         values.put(DataKey.SERVICE_DATE, fromFact(receipt, FactKey.SERVICE_DATE, SourceType.RECEIPT));
         values.put(DataKey.SERVICE_TYPE, fromFact(receipt, FactKey.SERVICE_TYPE, SourceType.RECEIPT));
+        values.put(DataKey.RECEIPT_NUMBER, fromFact(receipt, FactKey.RECEIPT_NUMBER, SourceType.RECEIPT));
         values.put(DataKey.AMOUNT_CHARGED, fromFact(receipt, FactKey.AMOUNT_CHARGED, SourceType.RECEIPT));
         values.put(DataKey.AMOUNT_PAID_BY_OTHER_PLAN,
                 fromFact(receipt, FactKey.AMOUNT_PAID_BY_OTHER_PLAN, SourceType.RECEIPT));
@@ -63,6 +66,7 @@ public final class ClaimValueAssembler {
                 profile == null || profile.getDateOfBirth() == null ? null : profile.getDateOfBirth().toString(),
                 "date of birth"));
         values.put(DataKey.PATIENT_ADDRESS, profileValue(profile == null ? null : profile.address(), "address"));
+        values.put(DataKey.PATIENT_PHONE, profileValue(profile == null ? null : profile.getPhone(), "phone"));
         values.put(DataKey.PATIENT_RELATIONSHIP, new DraftValue(relationship.label(), SourceType.CLAIM_SETUP, null,
                 "Chosen when you started this claim", null, null, true));
 

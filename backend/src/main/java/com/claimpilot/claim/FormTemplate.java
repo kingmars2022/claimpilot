@@ -24,6 +24,8 @@ public final class FormTemplate {
 
     /** The fictional Cedarview Assurance second-plan claim form used in the demo. */
     public static final String SECONDARY_CLAIM_FORM = "forms/cedarview-secondary-claim-form.pdf";
+    /** The fictional Harbourline Vie claim form, in French. */
+    public static final String FRENCH_CLAIM_FORM = "forms/harbourline-demande-de-remboursement.pdf";
 
     private final String name;
     private final byte[] bytes;

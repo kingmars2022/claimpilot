@@ -15,6 +15,7 @@ import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import com.claimpilot.claim.FormTemplate;
 import com.claimpilot.config.AppProperties;
 import com.claimpilot.extraction.DocumentFact;
 import com.claimpilot.extraction.DocumentFactRepository;
@@ -25,7 +26,7 @@ import com.claimpilot.storage.FileStorage;
 /**
  * Runs in the background after an upload (the request returns 202 at once):
  * a policy is split into chunks, embedded and stored in pgvector, and read for its key facts;
- * a receipt is read for its key facts only.
+ * a receipt is read for its key facts only; a claim form is checked for fillable fields.
  */
 @Service
 public class ProcessingService {
@@ -73,6 +74,11 @@ public class ProcessingService {
 
         Integer chunkCount = null;
         try {
+            if (doc.getKind() == DocumentKind.FORM) {
+                chunkCount = countFormFields(doc);
+                markReady(documentId, chunkCount);
+                return;
+            }
             DocumentReaderFactory.ReadResult read = readerFactory.read(storage.load(doc.getStorageKey()), doc.getFileName());
             if (read.pages().stream().allMatch(p -> p.text().isBlank())) {
                 throw new IllegalStateException("No readable text found. Try a clearer photo or a text PDF.");
@@ -94,6 +100,10 @@ public class ProcessingService {
             return;
         }
 
+        markReady(documentId, chunkCount);
+    }
+
+    private void markReady(UUID documentId, Integer count) {
         UploadedDocument fresh = repository.findById(documentId).orElse(null);
         if (fresh == null) {
             // Deleted while processing: remove the chunks just added so nothing is left behind.
@@ -101,9 +111,23 @@ public class ProcessingService {
             facts.deleteByDocumentId(documentId);
             return;
         }
-        fresh.markReady(chunkCount);
+        fresh.markReady(count);
         repository.save(fresh);
         log.info("Processed {} {}", fresh.getKind(), fresh.getFileName());
+    }
+
+    /** A claim form must be a fillable PDF; its field count is stored in place of a chunk count. */
+    private int countFormFields(UploadedDocument doc) throws java.io.IOException {
+        byte[] bytes;
+        try (java.io.InputStream in = storage.load(doc.getStorageKey()).getInputStream()) {
+            bytes = in.readAllBytes();
+        }
+        int fields = FormTemplate.of(doc.getFileName(), bytes).fields().size();
+        if (fields == 0) {
+            throw new IllegalStateException(
+                    "This PDF has no fillable fields. Upload the insurer's fillable (interactive) PDF form.");
+        }
+        return fields;
     }
 
     /** Copies each chunk with the metadata needed for citations, isolation and deletion. */

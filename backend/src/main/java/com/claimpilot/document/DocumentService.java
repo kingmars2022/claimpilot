@@ -19,7 +19,7 @@ import com.claimpilot.extraction.ExtractionLogRepository;
 import com.claimpilot.storage.FileStorage;
 import com.claimpilot.user.AppUser;
 
-/** Policies and receipts. Every method takes the signed-in user and only touches their files. */
+/** Policies, receipts and claim forms. Every method takes the signed-in user and only touches their files. */
 @Service
 public class DocumentService {
 
@@ -127,6 +127,10 @@ public class DocumentService {
     }
 
     private static String label(DocumentKind kind) {
-        return kind == DocumentKind.POLICY ? "Policy" : "Receipt";
+        return switch (kind) {
+            case POLICY -> "Policy";
+            case RECEIPT -> "Receipt";
+            case FORM -> "Claim form";
+        };
     }
 }

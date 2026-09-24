@@ -21,7 +21,12 @@ public enum ClaimType {
 
     SECONDARY_DRUGS("Prescription drugs on a second plan",
             List.of("prescription drug coverage percentage dispensing fee deductible",
-                    "drug card pharmacy direct billing prior authorization special authorization"));
+                    "drug card pharmacy direct billing prior authorization special authorization")),
+
+    SECONDARY_VISION("Vision care (glasses, contact lenses, eye exams) on a second plan",
+            List.of("vision care eyeglasses contact lenses maximum every 24 months",
+                    "eye examination optometrist coverage frequency",
+                    "laser eye surgery prescription required for glasses"));
 
     /** Searches shared by every claim type: deadlines, documents, how to submit, other coverage. */
     static final List<String> COMMON_QUERIES = List.of(

@@ -6,8 +6,8 @@ import java.io.InputStream;
 import org.springframework.core.io.Resource;
 
 /**
- * Where uploaded files live. Phase 1 uses the local disk; phase 3 swaps in Amazon S3
- * without touching the callers.
+ * Where uploaded files live: the local disk or an S3 bucket, optionally encrypted at rest. The
+ * implementation is chosen in {@link StorageConfig} without touching the callers.
  */
 public interface FileStorage {
 

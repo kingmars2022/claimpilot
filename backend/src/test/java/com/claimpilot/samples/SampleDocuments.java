@@ -49,6 +49,7 @@ public final class SampleDocuments {
     public static final String RECEIPT_PDF = "physio-receipt-2026-03-05.pdf";
     public static final String RECEIPT_PNG = "physio-receipt-2026-03-05.png";
     public static final String CLAIM_FORM = "cedarview-secondary-claim-form.pdf";
+    public static final String FRENCH_CLAIM_FORM = "harbourline-demande-de-remboursement.pdf";
     public static final String SPOUSE_POLICY_SCANNED = "cedarview-policy-marc-gagnon-scanned.pdf";
     public static final String RECEIPT_SCANNED = "physio-receipt-2026-03-05-scanned.pdf";
 
@@ -74,6 +75,8 @@ public final class SampleDocuments {
         Files.createDirectories(forms);
         Files.write(forms.resolve(CLAIM_FORM), claimForm());
         Files.write(samples.resolve(CLAIM_FORM), claimForm());
+        Files.write(forms.resolve(FRENCH_CLAIM_FORM), frenchClaimForm());
+        Files.write(samples.resolve(FRENCH_CLAIM_FORM), frenchClaimForm());
         System.out.println("Sample documents written to " + samples.toAbsolutePath().normalize());
     }
 
@@ -236,18 +239,107 @@ public final class SampleDocuments {
 
     // ---------------------------------------------------------------- claim form
 
-    /**
-     * A fillable second-plan claim form. Field names are deliberately meaningless (txtField_07), as
-     * on many real forms; only the tooltips say what each field is.
-     */
+    /** The Cedarview second-plan claim form (English). */
     public static byte[] claimForm() {
+        return fillableForm(List.of(
+                "CEDARVIEW ASSURANCE",
+                "Supplementary Health Claim - Second Plan",
+                "Fictional form created for a software demonstration. Cedarview Assurance is not a real company."),
+                List.of(
+                        section("Part A - Plan member on this Cedarview plan"),
+                        field("txtField_01", "Plan member's full name"),
+                        field("txtField_02", "Group policy number"),
+                        field("txtField_03", "Certificate number"),
+                        field("txtField_04", "Plan sponsor (employer)"),
+                        section("Part B - Patient"),
+                        field("txtField_05", "Patient's full name"),
+                        field("txtField_06", "Patient's date of birth (YYYY-MM-DD)"),
+                        field("txtField_07", "Patient's relationship to the plan member"),
+                        field("txtField_08", "Patient's mailing address"),
+                        section("Part C - Other plan (paid first)"),
+                        field("txtField_09", "Name of the other insurance company"),
+                        field("txtField_10", "Other plan's group policy number"),
+                        field("txtField_11", "Other plan's certificate or ID number"),
+                        section("Part D - Expense"),
+                        field("txtField_12", "Name of clinic or practitioner"),
+                        field("txtField_13", "Date of service (YYYY-MM-DD)"),
+                        field("txtField_14", "Type of service"),
+                        field("txtField_15", "Total amount charged ($)"),
+                        field("txtField_16", "Amount paid by the other plan ($)"),
+                        field("txtField_17", "Amount claimed from Cedarview ($)"),
+                        section("Part E - Payment and declaration"),
+                        field("txtField_19", "Bank transit and account number for direct deposit"),
+                        checkbox("chkField_01", "I declare that the information on this claim is true and complete"),
+                        field("sigField_01", "Signature of plan member"),
+                        field("txtField_18", "Date signed (YYYY-MM-DD)")));
+    }
+
+    /**
+     * A second fillable form, in French, from the fictional Harbourline Vie: shows that mapping by
+     * label works whatever the language and field names (here f01, f02...).
+     */
+    public static byte[] frenchClaimForm() {
+        return fillableForm(List.of(
+                "HARBOURLINE VIE",
+                "Demande de remboursement - soins de sante complementaires",
+                "Formulaire fictif cree pour une demonstration logicielle. Harbourline Vie n'existe pas."),
+                List.of(
+                        section("Section 1 - Adherent"),
+                        field("f01", "Nom de l'adh\u00e9rent"),
+                        field("f02", "Num\u00e9ro de police collective"),
+                        field("f03", "Num\u00e9ro de certificat"),
+                        section("Section 2 - Patient"),
+                        field("f04", "Nom du patient"),
+                        field("f05", "Date de naissance du patient (AAAA-MM-JJ)"),
+                        field("f06", "Lien avec l'adh\u00e9rent"),
+                        field("f07", "Adresse du patient"),
+                        field("f08", "T\u00e9l\u00e9phone du patient"),
+                        section("Section 3 - Autre regime"),
+                        field("f09", "Nom de l'autre assureur"),
+                        field("f10", "Num\u00e9ro de police de l'autre r\u00e9gime"),
+                        section("Section 4 - Frais"),
+                        field("f11", "Nom du fournisseur de soins"),
+                        field("f12", "Num\u00e9ro du re\u00e7u"),
+                        field("f13", "Date du service (AAAA-MM-JJ)"),
+                        field("f14", "Type de soin"),
+                        field("f15", "Montant factur\u00e9 ($)"),
+                        field("f16", "Montant pay\u00e9 par l'autre r\u00e9gime ($)"),
+                        field("f17", "Montant r\u00e9clam\u00e9 ($)"),
+                        section("Section 5 - Declaration"),
+                        checkbox("f18", "J'atteste que les renseignements fournis sont exacts"),
+                        field("f19", "Signature de l'adh\u00e9rent"),
+                        field("f20", "Date de la signature (AAAA-MM-JJ)")));
+    }
+
+    /** One line of a generated form: a section title, a text field or a checkbox. */
+    private record FormLine(String name, String label, boolean checkbox) {
+    }
+
+    private static FormLine section(String title) {
+        return new FormLine(null, title, false);
+    }
+
+    private static FormLine field(String name, String label) {
+        return new FormLine(name, label, false);
+    }
+
+    private static FormLine checkbox(String name, String label) {
+        return new FormLine(name, label, true);
+    }
+
+    /**
+     * A one-page fillable form. Field names are deliberately meaningless (txtField_07, f07), as on
+     * many real forms; only the tooltips say what each field is.
+     */
+    private static byte[] fillableForm(List<String> header, List<FormLine> lines) {
         try (PDDocument pdf = new PDDocument()) {
             PDPage page = new PDPage(PDRectangle.LETTER);
             pdf.addPage(page);
             PDAcroForm form = new PDAcroForm(pdf);
             pdf.getDocumentCatalog().setAcroForm(form);
             PDResources resources = new PDResources();
-            resources.put(COSName.HELV, REGULAR);
+            // A font of its own: PDFBox clears a shared font dictionary when another document closes.
+            resources.put(COSName.HELV, new PDType1Font(Standard14Fonts.FontName.HELVETICA));
             form.setDefaultResources(resources);
             form.setDefaultAppearance("/Helv 10 Tf 0 g");
             form.setNeedAppearances(true);
@@ -255,38 +347,19 @@ public final class SampleDocuments {
             List<Object[]> layout = new ArrayList<>();
             try (PDPageContentStream out = new PDPageContentStream(pdf, page)) {
                 float y = 745;
-                y = line(out, BOLD, 15, MARGIN, y, "CEDARVIEW ASSURANCE");
-                y = line(out, BOLD, 12, MARGIN, y, "Supplementary Health Claim - Second Plan");
-                y = line(out, REGULAR, 8, MARGIN, y,
-                        "Fictional form created for a software demonstration. Cedarview Assurance is not a real company.");
+                y = line(out, BOLD, 15, MARGIN, y, header.get(0));
+                y = line(out, BOLD, 12, MARGIN, y, header.get(1));
+                y = line(out, REGULAR, 8, MARGIN, y, header.get(2));
                 y -= 6;
-                y = section(out, y, "Part A - Plan member on this Cedarview plan");
-                y = row(out, layout, y, "txtField_01", "Plan member's full name");
-                y = row(out, layout, y, "txtField_02", "Group policy number");
-                y = row(out, layout, y, "txtField_03", "Certificate number");
-                y = row(out, layout, y, "txtField_04", "Plan sponsor (employer)");
-                y = section(out, y, "Part B - Patient");
-                y = row(out, layout, y, "txtField_05", "Patient's full name");
-                y = row(out, layout, y, "txtField_06", "Patient's date of birth (YYYY-MM-DD)");
-                y = row(out, layout, y, "txtField_07", "Patient's relationship to the plan member");
-                y = row(out, layout, y, "txtField_08", "Patient's mailing address");
-                y = section(out, y, "Part C - Other plan (paid first)");
-                y = row(out, layout, y, "txtField_09", "Name of the other insurance company");
-                y = row(out, layout, y, "txtField_10", "Other plan's group policy number");
-                y = row(out, layout, y, "txtField_11", "Other plan's certificate or ID number");
-                y = section(out, y, "Part D - Expense");
-                y = row(out, layout, y, "txtField_12", "Name of clinic or practitioner");
-                y = row(out, layout, y, "txtField_13", "Date of service (YYYY-MM-DD)");
-                y = row(out, layout, y, "txtField_14", "Type of service");
-                y = row(out, layout, y, "txtField_15", "Total amount charged ($)");
-                y = row(out, layout, y, "txtField_16", "Amount paid by the other plan ($)");
-                y = row(out, layout, y, "txtField_17", "Amount claimed from Cedarview ($)");
-                y = section(out, y, "Part E - Payment and declaration");
-                y = row(out, layout, y, "txtField_19", "Bank transit and account number for direct deposit");
-                y = checkboxRow(out, layout, y, "chkField_01",
-                        "I declare that the information on this claim is true and complete");
-                y = row(out, layout, y, "sigField_01", "Signature of plan member");
-                row(out, layout, y, "txtField_18", "Date signed (YYYY-MM-DD)");
+                for (FormLine l : lines) {
+                    if (l.name() == null) {
+                        y = section(out, y, l.label());
+                    } else if (l.checkbox()) {
+                        y = checkboxRow(out, layout, y, l.name(), l.label());
+                    } else {
+                        y = row(out, layout, y, l.name(), l.label());
+                    }
+                }
             }
             for (Object[] field : layout) {
                 if ((Boolean) field[3]) {

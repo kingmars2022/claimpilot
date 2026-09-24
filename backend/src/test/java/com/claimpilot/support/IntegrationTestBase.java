@@ -225,7 +225,7 @@ public abstract class IntegrationTestBase {
                 case EXTRACT_POLICY -> text.contains("CEDARVIEW") ? CEDARVIEW_FACTS
                         : text.contains("HARBOURLINE") ? HARBOURLINE_FACTS : "{}";
                 case EXTRACT_RECEIPT -> RECEIPT_FACTS;
-                case MAP_FORM -> FORM_MAPPING;
+                case MAP_FORM -> text.contains("- f01:") ? FRENCH_FORM_MAPPING : FORM_MAPPING;
                 case GUIDE -> GUIDE;
                 case ANSWER -> nextAnswer;
                 case TRANSLATE -> "Is physiotherapy covered by my plan?";
@@ -285,6 +285,15 @@ public abstract class IntegrationTestBase {
                 """;
 
         /** Includes a signature field mapped to a name, which the application must refuse. */
+        static final String FRENCH_FORM_MAPPING = """
+                {"f01": "MEMBER_NAME", "f02": "POLICY_NUMBER", "f03": "CERTIFICATE_NUMBER", "f04": "PATIENT_NAME",
+                 "f05": "PATIENT_DOB", "f06": "PATIENT_RELATIONSHIP", "f07": "PATIENT_ADDRESS", "f08": "PATIENT_PHONE",
+                 "f09": "OTHER_INSURER", "f10": "OTHER_POLICY_NUMBER", "f11": "PROVIDER_NAME", "f12": "RECEIPT_NUMBER",
+                 "f13": "SERVICE_DATE", "f14": "SERVICE_TYPE", "f15": "AMOUNT_CHARGED",
+                 "f16": "AMOUNT_PAID_BY_OTHER_PLAN", "f17": "AMOUNT_CLAIMED", "f18": "DECLARATION",
+                 "f19": "SIGNATURE", "f20": "PATIENT_DOB"}
+                """;
+
         static final String FORM_MAPPING = """
                 {"txtField_01": "MEMBER_NAME", "txtField_02": "POLICY_NUMBER", "txtField_03": "CERTIFICATE_NUMBER",
                  "txtField_04": "PLAN_SPONSOR", "txtField_05": "PATIENT_NAME", "txtField_06": "PATIENT_DOB",

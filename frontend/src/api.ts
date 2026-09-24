@@ -1,7 +1,7 @@
 export type DocumentStatus = 'UPLOADED' | 'PROCESSING' | 'READY' | 'FAILED';
-export type DocumentKind = 'POLICY' | 'RECEIPT';
+export type DocumentKind = 'POLICY' | 'RECEIPT' | 'FORM';
 export type AnswerStatus = 'ANSWERED' | 'UNCLEAR' | 'NOT_IN_POLICY';
-export type ClaimType = 'SECONDARY_PARAMEDICAL' | 'SECONDARY_DENTAL' | 'SECONDARY_DRUGS';
+export type ClaimType = 'SECONDARY_PARAMEDICAL' | 'SECONDARY_DENTAL' | 'SECONDARY_DRUGS' | 'SECONDARY_VISION';
 export type Relationship = 'SELF' | 'SPOUSE' | 'CHILD';
 export type SourceType =
   | 'POLICY'
@@ -138,12 +138,24 @@ export interface ClaimDraft {
   policy: { id: string; fileName: string } | null;
   otherPolicy: { id: string; fileName: string } | null;
   receipt: { id: string; fileName: string } | null;
+  form: { key: string; name: string };
   relationship: Relationship;
   fields: DraftField[];
   leftForYou: string[];
   readyToDownload: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A claim form: built into the app, or a fillable PDF the user uploaded. */
+export interface FormOption {
+  key: string;
+  name: string;
+  builtIn: boolean;
+  status: DocumentStatus;
+  fieldCount: number | null;
+  errorMessage: string | null;
+  createdAt: string | null;
 }
 
 export interface Profile {
@@ -243,7 +255,7 @@ function json(method: string, body: unknown): RequestInit {
   return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
 }
 
-function uploadTo(collection: 'policies' | 'receipts', file: File) {
+function uploadTo(collection: 'policies' | 'receipts' | 'forms', file: File) {
   const form = new FormData();
   form.append('file', file);
   return request<UploadedDocument>(`/api/${collection}`, { method: 'POST', body: form });
@@ -281,7 +293,11 @@ export const api = {
     otherPolicyId: string | null;
     receiptId: string | null;
     relationship: Relationship;
+    formKey: string | null;
   }) => request<ClaimDraft>('/api/claims', json('POST', body)),
+  forms: () => request<FormOption[]>('/api/forms'),
+  uploadForm: (file: File) => uploadTo('forms', file),
+  deleteForm: (id: string) => request<void>(`/api/forms/${id}`, { method: 'DELETE' }),
   updateField: (id: string, key: string, change: { value?: string; reviewed?: boolean }) =>
     request<ClaimDraft>(`/api/claims/${id}/fields/${key}`, json('PATCH', change)),
   deleteDraft: (id: string) => request<void>(`/api/claims/${id}`, { method: 'DELETE' }),
