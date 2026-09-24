@@ -1,7 +1,9 @@
 package com.claimpilot;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.List;
 import java.util.Map;
@@ -120,6 +122,16 @@ class PolicyIntegrationTest extends IntegrationTestBase {
                 .getContentAsString();
         assertThat((Integer) JsonPath.read(saved, "$.messages.length()")).isEqualTo(4);
         assertThat((String) JsonPath.read(saved, "$.messages[1].status")).isEqualTo("ANSWERED");
+    }
+
+    @Test
+    void deletingAPolicyDeletesTheQuestionsAskedAboutIt() throws Exception {
+        String conversationId = JsonPath.read(ask(token, policyId, "Is laser eye surgery included?", null),
+                "$.conversationId");
+
+        mvc.perform(as(token, delete("/api/policies/" + policyId))).andExpect(status().isNoContent());
+
+        mvc.perform(as(token, get("/api/conversations/" + conversationId))).andExpect(status().isNotFound());
     }
 
     private static Map<String, Object> fact(String documentJson, String key) {

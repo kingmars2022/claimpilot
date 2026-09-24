@@ -45,6 +45,19 @@ class FieldMappingServiceTest {
     }
 
     @Test
+    void certificateNumbersCanBeFilled() {
+        String reply = """
+                {"txtField_03": "CERTIFICATE_NUMBER", "txtField_11": "OTHER_CERTIFICATE_NUMBER"}
+                """;
+
+        Map<String, DataKey> mapping = FieldMappingService.parse(reply, FORM);
+
+        assertThat(mapping.get("txtField_03")).isEqualTo(DataKey.CERTIFICATE_NUMBER);
+        assertThat(mapping.get("txtField_11")).isEqualTo(DataKey.OTHER_CERTIFICATE_NUMBER);
+        assertThat(FieldMappingService.PERSONAL_ATTESTATION.matcher("I certify that this is true").find()).isTrue();
+    }
+
+    @Test
     void promptListsItemsAndFields() {
         assertThat(FieldMappingService.prompt(FORM))
                 .contains("- MEMBER_NAME:")

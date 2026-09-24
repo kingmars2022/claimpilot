@@ -70,7 +70,8 @@ public class FactExtractor {
         sb.append("""
 
                 For each field return {"value": ..., "quote": ...}. "quote" is the exact text copied from the document \
-                that contains the value, one line or sentence. Write dates as YYYY-MM-DD and amounts as plain numbers \
+                that contains the value, one line or sentence. Copy text values as they are written, in the \
+                document's language: never translate them. Write dates as YYYY-MM-DD and amounts as plain numbers \
                 such as 85.00.
 
                 Example: {"FIELD_ONE": {"value": "ABC-123", "quote": "Policy number: ABC-123"}, "FIELD_TWO": null}
