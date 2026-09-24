@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
-import { api, type KnowledgeDocument } from '../api';
+import { api, type Department, type KnowledgeDocument } from '../api';
+import VisibilityPicker, { visibilityLabel } from './VisibilityPicker';
 
 const ACCEPT = '.pdf,.docx,.md,.txt';
 const POLL_MS = 2000;
@@ -36,6 +37,9 @@ export default function LibraryView() {
   const [uploading, setUploading] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [uploadVisibility, setUploadVisibility] = useState<number[]>([]);
+  const [editing, setEditing] = useState<{ id: string; value: number[] } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
@@ -48,6 +52,7 @@ export default function LibraryView() {
 
   useEffect(() => {
     void refresh();
+    api.departments().then(setDepartments, (err) => setErrors([err instanceof Error ? err.message : String(err)]));
   }, [refresh]);
 
   // Poll only while something is still being indexed.
@@ -63,7 +68,7 @@ export default function LibraryView() {
     for (const file of Array.from(files)) {
       setUploading(file.name);
       try {
-        await api.uploadDocument(file);
+        await api.uploadDocument(file, uploadVisibility);
       } catch (err) {
         problems.push(`${file.name} was not added: ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -83,6 +88,18 @@ export default function LibraryView() {
     await refresh();
   }
 
+  async function saveVisibility() {
+    if (!editing) return;
+    try {
+      await api.setVisibility(editing.id, editing.value);
+      setEditing(null);
+      setErrors([]);
+    } catch (err) {
+      setErrors([err instanceof Error ? err.message : String(err)]);
+    }
+    await refresh();
+  }
+
   function onDrop(event: DragEvent<HTMLLabelElement>) {
     event.preventDefault();
     setDragging(false);
@@ -93,8 +110,18 @@ export default function LibraryView() {
     <div className="library">
       <div className="library-head">
         <h1>Library</h1>
-        <p className="muted">Documents added here become searchable in a few seconds.</p>
+        <p className="muted">
+          Documents added here become searchable in a few seconds. Choose who can see each one: people outside
+          those departments never get answers from it.
+        </p>
       </div>
+
+      <VisibilityPicker
+        legend="New uploads are visible to"
+        departments={departments}
+        value={uploadVisibility}
+        onChange={setUploadVisibility}
+      />
 
       <label
         className="dropzone"
@@ -137,6 +164,7 @@ export default function LibraryView() {
             <thead>
               <tr>
                 <th scope="col">Name</th>
+                <th scope="col">Visible to</th>
                 <th scope="col">Status</th>
                 <th scope="col" className="num">Sections</th>
                 <th scope="col" className="num">Size</th>
@@ -148,6 +176,39 @@ export default function LibraryView() {
               {documents.map((doc) => (
                 <tr key={doc.id}>
                   <td className="file">{doc.fileName}</td>
+                  <td className="visible-to">
+                    {editing?.id === doc.id ? (
+                      <div className="visibility-edit">
+                        <VisibilityPicker
+                          legend={`Who can see ${doc.fileName}`}
+                          departments={departments}
+                          value={editing.value}
+                          onChange={(value) => setEditing({ id: doc.id, value })}
+                        />
+                        <div className="row-actions">
+                          <button type="button" className="primary small-button" onClick={() => void saveVisibility()}>
+                            Save
+                          </button>
+                          <button type="button" className="quiet" onClick={() => setEditing(null)}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="access" data-restricted={doc.visibleTo.length > 0 || undefined}>
+                          {visibilityLabel(doc.visibleTo)}
+                        </span>
+                        <button
+                          type="button"
+                          className="link small"
+                          onClick={() => setEditing({ id: doc.id, value: doc.visibleTo.map((d) => d.id) })}
+                        >
+                          Change
+                        </button>
+                      </>
+                    )}
+                  </td>
                   <td>
                     <span className="status" data-status={doc.status} title={doc.errorMessage ?? undefined}>
                       {STATUS_LABELS[doc.status]}

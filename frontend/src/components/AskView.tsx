@@ -1,10 +1,20 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { api, type ChatAnswer, type Citation } from '../api';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { api, type Citation, type Conversation, type ConversationSummary } from '../api';
+
+interface Answer {
+  text: string;
+  grounded: boolean;
+  citations: Citation[];
+  /** Null for answers loaded from history. */
+  latencyMs: number | null;
+}
 
 interface Turn {
   id: number;
   question: string;
-  answer?: ChatAnswer;
+  /** Set when a follow-up was rewritten into a standalone search. */
+  searchQuery: string | null;
+  answer?: Answer;
   error?: string;
 }
 
@@ -17,31 +27,113 @@ const EXAMPLES = [
 
 const MARKER = /(\[\d{1,2}\])/g;
 
+/** Rebuilds question/answer turns from a stored conversation. */
+function toTurns(conversation: Conversation, firstId: number): Turn[] {
+  const turns: Turn[] = [];
+  for (let i = 0; i + 1 < conversation.messages.length; i += 2) {
+    const question = conversation.messages[i];
+    const answer = conversation.messages[i + 1];
+    turns.push({
+      id: firstId + turns.length,
+      question: question.content,
+      searchQuery: question.searchQuery,
+      answer: {
+        text: answer.content,
+        grounded: answer.grounded ?? false,
+        citations: answer.citations ?? [],
+        latencyMs: null,
+      },
+    });
+  }
+  return turns;
+}
+
 export default function AskView() {
+  const [history, setHistory] = useState<ConversationSummary[]>([]);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState('');
   const [pending, setPending] = useState(false);
   const [activeTurnId, setActiveTurnId] = useState<number | null>(null);
   const [activeCitation, setActiveCitation] = useState<number | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const nextId = useRef(1);
   const endRef = useRef<HTMLDivElement>(null);
+
+  const refreshHistory = useCallback(async () => {
+    try {
+      setHistory(await api.conversations());
+      setHistoryError(null);
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshHistory();
+  }, [refreshHistory]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [turns]);
 
+  function startNewChat() {
+    setConversationId(null);
+    setTurns([]);
+    setActiveTurnId(null);
+    setActiveCitation(null);
+    setHistoryOpen(false);
+  }
+
+  async function openConversation(id: string) {
+    setHistoryOpen(false);
+    try {
+      const conversation = await api.conversation(id);
+      const loaded = toTurns(conversation, nextId.current);
+      nextId.current += loaded.length;
+      setConversationId(conversation.id);
+      setTurns(loaded);
+      setActiveTurnId(loaded.at(-1)?.id ?? null);
+      setActiveCitation(null);
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function removeConversation(id: string) {
+    if (!window.confirm('Delete this conversation?')) return;
+    try {
+      await api.deleteConversation(id);
+      if (id === conversationId) startNewChat();
+      await refreshHistory();
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function ask(question: string) {
     const text = question.trim();
     if (!text || pending) return;
     const id = nextId.current++;
-    setTurns((prev) => [...prev, { id, question: text }]);
+    setTurns((prev) => [...prev, { id, question: text, searchQuery: null }]);
     setDraft('');
     setPending(true);
     try {
-      const answer = await api.ask(text);
-      setTurns((prev) => prev.map((turn) => (turn.id === id ? { ...turn, answer } : turn)));
+      const response = await api.ask(text, conversationId);
+      const answer: Answer = {
+        text: response.answer,
+        grounded: response.grounded,
+        citations: response.citations,
+        latencyMs: response.latencyMs,
+      };
+      setTurns((prev) =>
+        prev.map((turn) => (turn.id === id ? { ...turn, answer, searchQuery: response.searchQuery } : turn)),
+      );
+      setConversationId(response.conversationId);
       setActiveTurnId(id);
       setActiveCitation(null);
+      void refreshHistory();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setTurns((prev) => prev.map((turn) => (turn.id === id ? { ...turn, error: message } : turn)));
@@ -72,11 +164,58 @@ export default function AskView() {
 
   return (
     <div className="ask">
+      <aside className="history" data-open={historyOpen || undefined} aria-label="Conversation history">
+        <div className="history-head">
+          <button type="button" className="new-chat" onClick={startNewChat}>
+            New conversation
+          </button>
+          <button
+            type="button"
+            className="quiet history-toggle"
+            aria-expanded={historyOpen}
+            onClick={() => setHistoryOpen((open) => !open)}
+          >
+            History ({history.length})
+          </button>
+        </div>
+        {historyError && <p className="error small">{historyError}</p>}
+        {history.length === 0 ? (
+          <p className="small muted history-empty">Your past conversations appear here.</p>
+        ) : (
+          <ul className="history-list">
+            {history.map((item) => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  className="history-item"
+                  aria-current={item.id === conversationId ? 'true' : undefined}
+                  onClick={() => void openConversation(item.id)}
+                  title={item.title}
+                >
+                  {item.title}
+                </button>
+                <button
+                  type="button"
+                  className="quiet history-delete"
+                  aria-label={`Delete conversation: ${item.title}`}
+                  onClick={() => void removeConversation(item.id)}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </aside>
+
       <section className="conversation" aria-live="polite">
         {turns.length === 0 && (
           <div className="intro">
             <h1>Ask about policies, tools and procedures</h1>
-            <p>Answers come only from your company's documents, with a link to every source.</p>
+            <p>
+              Answers come only from documents you are allowed to see, with a link to every source. Follow-up
+              questions keep the context of the conversation.
+            </p>
             <p className="intro-label">Try one of these</p>
             <ul className="examples">
               {EXAMPLES.map((example) => (
@@ -93,6 +232,7 @@ export default function AskView() {
         {turns.map((turn) => (
           <article key={turn.id} className="turn" aria-current={turn.id === activeTurnId ? 'true' : undefined}>
             <p className="question">{turn.question}</p>
+            {turn.searchQuery && <p className="search-query">Searched for: {turn.searchQuery}</p>}
 
             {!turn.answer && !turn.error && <p className="pending">Finding the answer…</p>}
 
@@ -104,7 +244,7 @@ export default function AskView() {
 
             {turn.answer && (
               <div className="answer">
-                {turn.answer.answer.split(/\n+/).map((paragraph, p) => (
+                {turn.answer.text.split(/\n+/).map((paragraph, p) => (
                   <p key={p}>
                     {paragraph.split(MARKER).map((part, i) => {
                       const match = part.match(/^\[(\d{1,2})\]$/);
@@ -127,7 +267,9 @@ export default function AskView() {
                   </p>
                 ))}
                 <p className="meta">
-                  Answered in {(turn.answer.latencyMs / 1000).toFixed(1)} s
+                  {turn.answer.latencyMs !== null && (
+                    <span>Answered in {(turn.answer.latencyMs / 1000).toFixed(1)} s</span>
+                  )}
                   {turn.answer.citations.length > 0 && turn.id !== activeTurnId && (
                     <button type="button" className="link" onClick={() => setActiveTurnId(turn.id)}>
                       Show sources for this answer
@@ -151,7 +293,7 @@ export default function AskView() {
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Ask a question…"
+          placeholder={conversationId ? 'Ask a follow-up…' : 'Ask a question…'}
           aria-label="Ask a question"
           rows={2}
           maxLength={2000}
@@ -175,7 +317,7 @@ function SourceList({
 }) {
   if (!turn?.answer) return <p className="muted">Sources for the selected answer appear here.</p>;
   if (turn.answer.citations.length === 0) {
-    return <p className="muted">No source in the knowledge base covers this question.</p>;
+    return <p className="muted">No document you can access covers this question.</p>;
   }
 
   return (

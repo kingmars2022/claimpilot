@@ -24,8 +24,13 @@ know internal policies and may invent them. CompanyBrain uses retrieval-augmente
   replies with a fixed "not found" message when the documents do not cover the question.
 - **Honest failure.** If no passage passes the similarity threshold, the API answers without calling
   the model at all, which avoids hallucinations and saves compute.
+- **Permission-aware retrieval.** A document can be limited to departments. The permission check
+  happens inside the vector search, so text a user may not see never reaches the model.
 
-## Features (phase 1)
+## Features
+
+### Phase 1: grounded answers
+
 
 - Upload PDF, Word, Markdown and text files; indexing runs in the background (`202 Accepted`).
 - Markdown and text files are split at their headings, then into chunks of about 300 tokens,
@@ -34,28 +39,45 @@ know internal policies and may invent them. CompanyBrain uses retrieval-augmente
 - Prompt-injection guard: retrieved text is treated as reference material, never as instructions.
 - Deleting a document removes its vectors, its file and its database record.
 
+### Phase 2: users, permissions and conversations
+
+- Sign-in with JWT bearer tokens (Spring Security OAuth2 resource server, HS256) and three roles:
+  **Employee** asks questions, **Knowledge manager** also manages documents, **Admin** also manages
+  users and departments.
+- Each document is visible to the whole company or to selected departments. Every chunk stores an
+  `access` list in its vector metadata, and each search adds a filter for the user's department.
+  Changing who can see a document updates that metadata with one SQL statement instead of
+  re-embedding the file.
+- Role and department are read from the database on every request, so an admin's change applies
+  immediately, even to tokens that were already issued.
+- Conversation history is stored in MongoDB. A follow-up such as *"And from the third year?"* is
+  first rewritten by the model into a standalone question, which is then used for retrieval; the
+  interface shows what was actually searched.
+
 ## Architecture
 
 ```mermaid
 flowchart LR
-    UI[React + Vite] -->|REST| API[Spring Boot 4 API]
+    UI[React + Vite] -->|REST + JWT| API[Spring Boot 4 API<br/>Spring Security]
     API --> FS[(File storage<br/>local disk → S3)]
     API -->|async indexing| IDX[Indexing service<br/>extract · split · embed]
     IDX --> EMB[Ollama<br/>bge-m3 embeddings]
     IDX --> PG[(PostgreSQL<br/>pgvector + metadata)]
     API --> RAG[Chat service<br/>retrieve · prompt · cite]
-    RAG --> PG
+    RAG -->|filtered by department| PG
     RAG --> LLM[Ollama<br/>qwen3:8b]
+    RAG --> MONGO[(MongoDB<br/>conversations)]
+    API --> PG
 ```
 
 | Layer | Technology |
 |---|---|
-| Backend | Java 21, Spring Boot 4.1, Spring AI 2.0, Spring Data JPA, Flyway, virtual threads |
+| Backend | Java 21, Spring Boot 4.1, Spring AI 2.0, Spring Security (JWT), Spring Data JPA and MongoDB, Flyway, virtual threads |
 | AI | Ollama (qwen3:8b chat, bge-m3 embeddings) locally; Amazon Bedrock planned |
-| Data | PostgreSQL 17 with pgvector (HNSW index, cosine distance) |
+| Data | PostgreSQL 17 with pgvector (HNSW index, cosine distance) for users, documents and vectors; MongoDB 7 for conversations |
 | Frontend | React 19, TypeScript, Vite |
 | Infrastructure | Docker Compose |
-| Testing | JUnit 5, AssertJ, Testcontainers (pgvector) |
+| Testing | JUnit 5, AssertJ, MockMvc, Testcontainers (pgvector, MongoDB) |
 
 ## Getting started
 
@@ -73,7 +95,7 @@ ollama pull qwen3:8b
 ollama pull bge-m3
 ```
 
-### 2. Start PostgreSQL
+### 2. Start PostgreSQL and MongoDB
 
 ```bash
 docker compose up -d
@@ -86,8 +108,11 @@ cd backend
 ./mvnw spring-boot:run
 ```
 
-The API starts on `http://localhost:8080`. Flyway creates the `documents` table and Spring AI
-creates the `vector_store` table on first start.
+The API starts on `http://localhost:8080`. Flyway creates the tables and the demo accounts, and
+Spring AI creates the `vector_store` table on first start.
+
+The token signing key has a development default. Anywhere else, set
+`COMPANYBRAIN_SECURITY_JWT_SECRET` to a random string of at least 32 characters.
 
 ### 4. Run the frontend
 
@@ -101,7 +126,16 @@ Open `http://localhost:5173`.
 
 ### 5. Try the demo
 
-Upload the three files in `sample-docs/` from the Library page, then ask:
+Sign in with one of the demo accounts (password `demo1234` for all of them):
+
+| Username | Role | Department |
+|---|---|---|
+| `ivan` | Employee | IT |
+| `fiona` | Employee | Finance |
+| `hana` | Knowledge manager | Human Resources |
+| `admin` | Admin | IT |
+
+As `hana` or `admin`, upload the three files in `sample-docs/` from the Library page, then ask:
 
 | Question | Answered from |
 |---|---|
@@ -110,15 +144,28 @@ Upload the three files in `sample-docs/` from the Library page, then ask:
 | What is the maximum I can expense for a client dinner? | `expense-policy.md` |
 | What is the dress code? | Not covered: returns the "not found" message |
 
+To see permission-aware retrieval, change a document's visibility to *Human Resources* in the
+Library. `hana` still gets answers from it; `ivan` gets the "not found" message for the same question.
+
 ## API
 
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/api/documents` | Upload a file (multipart field `file`). Returns `202` and the document record. |
-| `GET` | `/api/documents` | List documents with their indexing status. |
-| `GET` | `/api/documents/{id}` | Get one document. |
-| `DELETE` | `/api/documents/{id}` | Delete the document, its file and its vectors. |
-| `POST` | `/api/chat` | Ask a question: `{ "question": "..." }`. |
+All endpoints except login need `Authorization: Bearer <token>`.
+
+| Method | Path | Who | Description |
+|---|---|---|---|
+| `POST` | `/api/auth/login` | Anyone | `{ "username", "password" }` → token, expiry and user. |
+| `GET` | `/api/auth/me` | Signed in | The current user with role and department. |
+| `GET` | `/api/departments` | Signed in | All departments. |
+| `POST` | `/api/chat` | Signed in | `{ "question", "conversationId"? }` → cited answer, conversation id, rewritten search query. |
+| `GET` | `/api/conversations` | Signed in | Your conversations, most recent first. |
+| `GET` / `DELETE` | `/api/conversations/{id}` | Owner | One conversation with its messages. |
+| `POST` | `/api/documents` | Knowledge manager, admin | Upload (multipart `file`, optional `departmentIds`). Returns `202`. |
+| `GET` | `/api/documents`, `/api/documents/{id}` | Knowledge manager, admin | Documents with status and visibility. |
+| `PUT` | `/api/documents/{id}/visibility` | Knowledge manager, admin | `{ "departmentIds": [...] }`; empty means the whole company. |
+| `DELETE` | `/api/documents/{id}` | Knowledge manager, admin | Delete the document, its file and its vectors. |
+| `GET` / `POST` | `/api/admin/users` | Admin | List or create users. |
+| `PUT` / `DELETE` | `/api/admin/users/{id}` | Admin | Update role, department, name or password; delete. |
+| `POST` | `/api/admin/departments` | Admin | Create a department. |
 
 Errors follow RFC 9457 (`application/problem+json`).
 
@@ -129,16 +176,21 @@ cd backend
 ./mvnw test
 ```
 
-- Unit tests cover prompt building and citation parsing.
-- `RagFlowIntegrationTest` starts the application against a real pgvector database in Docker
-  (Testcontainers) and runs upload → background indexing → retrieval → answer → delete.
-  The chat and embedding models are replaced by deterministic fakes, so the test needs Docker
-  but not Ollama.
+- Unit tests cover prompt building, citation parsing, follow-up rewriting, Markdown sections and
+  access rules.
+- Integration tests start the whole application over HTTP (MockMvc) against real pgvector and
+  MongoDB databases in Docker (Testcontainers):
+  - `RagFlowIntegrationTest`: upload → background indexing → retrieval → cited answer → delete.
+  - `AccessControlIntegrationTest`: sign-in, role checks, and a department-restricted document that
+    reaches only that department, including after its visibility or a user's department changes.
+  - `ConversationIntegrationTest`: follow-up rewriting, saved history, and privacy between users.
+- The chat and embedding models are replaced by deterministic fakes, so the tests need Docker but
+  not Ollama.
 
 ## Roadmap
 
 - [x] **Phase 1** RAG with citations, document library, web UI
-- [ ] **Phase 2** Authentication (JWT), departments and permission-aware retrieval; chat history in MongoDB
+- [x] **Phase 2** Authentication (JWT), departments and permission-aware retrieval; chat history in MongoDB
 - [ ] **Phase 3** Event-driven ingestion: S3 upload triggers AWS Lambda, API Gateway, Kafka events, audit log
 - [ ] **Phase 4** AI agent with tools (leave balance, IT tickets, room booking) and user confirmation for actions
 - [ ] **Phase 5** Redis caching and rate limiting, knowledge-gap report, retrieval evaluation, AWS deployment with Bedrock
@@ -148,8 +200,17 @@ cd backend
 - **Local models first.** Ollama keeps development free and private. Spring AI abstracts the model
   provider, so moving to Amazon Bedrock is a dependency and configuration change.
 - **pgvector instead of a separate vector database.** One PostgreSQL instance holds both business
-  data and embeddings, which keeps operations simple and allows SQL filters on metadata
-  (needed for permission-aware retrieval in phase 2).
+  data and embeddings, which keeps operations simple and allows SQL filters on metadata, which
+  permission-aware retrieval relies on.
+- **Filter during retrieval, not after.** Filtering the top results after the search would both
+  leak restricted text into the pipeline and return fewer than `top-k` passages. The department
+  filter is part of the vector query instead.
+- **MongoDB for conversations.** A conversation is always read and written as a whole and has no
+  fixed shape, so it is stored as one document with its messages embedded. Relational data (users,
+  departments, documents) stays in PostgreSQL.
+- **Rewrite follow-ups before searching.** "And from the third year?" alone matches nothing useful.
+  One extra model call turns it into a complete question; the first question of a conversation
+  skips this step.
 - **Fixed "not found" text.** The fallback answer is defined in code, not generated,
   so it is predictable and testable.
 - **bge-m3 embeddings.** The demo is English only, but bge-m3 is multilingual, so French or other
