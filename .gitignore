@@ -16,3 +16,6 @@ data/
 # Local secrets
 .env
 *.local
+
+# Real documents for local testing only, never pushed
+sample-docs/private/
