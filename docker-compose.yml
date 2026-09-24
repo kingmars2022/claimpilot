@@ -68,6 +68,15 @@ services:
     volumes:
       - s3data:/data
 
+  # The AWS design locally: S3 "object created" notifications through an SQS queue.
+  # Started with: docker compose --profile events --profile sqs up -d (ElasticMQ is free, SQS-compatible)
+  sqs:
+    image: softwaremill/elasticmq-native:1.6.14
+    container_name: claimpilot-sqs
+    profiles: ["sqs"]
+    ports:
+      - "9324:9324"
+
   # Phase 5, started with: docker compose --profile cache up -d
   redis:
     image: redis:7.4-alpine

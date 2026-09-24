@@ -73,10 +73,18 @@ claimpilot:
       secret-key: ${CLAIMPILOT_S3_SECRET_KEY:claimpilot-secret}
       path-style: true
   events:
-    mode: inline             # inline | kafka (docker compose --profile events, then the "events" Spring profile)
+    mode: inline             # inline | kafka ("events" profile) | sqs ("sqs" profile)
     uploaded-topic: claimpilot.documents.uploaded
     processed-topic: claimpilot.documents.processed
     instance-id: ${HOSTNAME:local}   # names this server's consumer group for notifications
+    sqs:
+      queue-url: http://localhost:9324/000000000000/claimpilot-uploads   # ElasticMQ locally
+      endpoint: http://localhost:9324
+      region: ca-central-1
+      access-key: x              # ElasticMQ accepts any; empty on AWS (the task's IAM role)
+      secret-key: x
+      publish-uploads: true      # locally the app posts the S3-style event; on AWS, S3 sends it
+      visibility-timeout-seconds: 300
   cache:
     type: memory             # memory | redis (docker compose --profile cache, then the "cache" Spring profile)
     ttl: 24h                 # a model reply is reused for the same prompt and user for this long

@@ -18,6 +18,8 @@ public interface DocumentRepository extends JpaRepository<UploadedDocument, UUID
 
     long countByOwnerId(Long ownerId);
 
+    Optional<UploadedDocument> findByStorageKey(String storageKey);
+
     @Query("select coalesce(sum(d.sizeBytes), 0) from UploadedDocument d where d.ownerId = :ownerId")
     long totalBytesOf(@Param("ownerId") Long ownerId);
 }

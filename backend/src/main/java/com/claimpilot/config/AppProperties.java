@@ -59,15 +59,27 @@ public record AppProperties(Storage storage, Indexing indexing, Retrieval retrie
 
     /**
      * @param mode           "inline": uploads are processed on a background thread of this server;
-     *                       "kafka": an event is published and a worker consumes it
+     *                       "kafka": an event is published and a worker consumes it;
+     *                       "sqs": S3 notifies an SQS queue of each stored file and a worker consumes it
      * @param uploadedTopic  events for new uploads, consumed by the processing workers
      * @param processedTopic events for finished processing, relayed to the users' browsers
      */
-    public record Events(String mode, String uploadedTopic, String processedTopic) {
+    public record Events(String mode, String uploadedTopic, String processedTopic, Sqs sqs) {
 
         public boolean kafka() {
             return "kafka".equalsIgnoreCase(mode);
         }
+    }
+
+    /**
+     * @param queueUrl        the queue that receives the bucket's "object created" notifications
+     * @param endpoint        empty for Amazon SQS; ElasticMQ locally, for example http://localhost:9324
+     * @param publishUploads  true where the storage cannot send notifications itself (locally): the
+     *                        app posts the same S3-style event after storing a file. False on AWS,
+     *                        where S3 sends it.
+     */
+    public record Sqs(String queueUrl, String endpoint, String region, String accessKey, String secretKey,
+                      boolean publishUploads, int visibilityTimeoutSeconds) {
     }
 
     /**

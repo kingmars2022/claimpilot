@@ -1,0 +1,9 @@
+# The AWS design, locally and free: files in the S3-compatible server, and "object created"
+# notifications through an SQS queue (ElasticMQ) to the processing worker.
+#   docker compose --profile events --profile sqs up -d
+#   SPRING_PROFILES_ACTIVE=sqs ./mvnw spring-boot:run
+claimpilot:
+  storage:
+    type: s3
+  events:
+    mode: sqs

@@ -37,6 +37,15 @@ claimpilot:
       access-key: ""                            # empty: the IAM role of the task
       secret-key: ""
       path-style: false
+  events:
+    mode: sqs                                   # S3 "object created" notifications -> SQS -> worker
+    sqs:
+      queue-url: ${CLAIMPILOT_SQS_QUEUE_URL}
+      endpoint: ""                              # empty: the real Amazon SQS
+      region: ${AWS_REGION:ca-central-1}
+      access-key: ""                            # empty: the IAM role of the task
+      secret-key: ""
+      publish-uploads: false                    # S3 sends the notification itself
   security:
     jwt-secret: ${CLAIMPILOT_SECURITY_JWT_SECRET}
     allow-dev-secrets: false
