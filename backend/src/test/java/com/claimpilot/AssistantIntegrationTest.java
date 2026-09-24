@@ -54,6 +54,18 @@ class AssistantIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void aClaimOnThePlanThatPaysFirstIsMovedToThePlanThatPaysSecond() throws Exception {
+        // The model picks Fiona's own plan (the newest upload, number 1), which pays first.
+        chatModel.nextPlan = "{\"steps\": [\"FILL\"], \"policy\": 1, \"claimType\": \"SECONDARY_PARAMEDICAL\"}";
+
+        String reply = assistant("Claim my physio receipt", null);
+
+        assertThat((List<String>) JsonPath.read(reply, "$.steps[*].type")).containsExactly("GUIDE", "NOTE", "CLAIM");
+        assertThat((String) JsonPath.read(reply, "$.steps[2].draft.policy.id")).isEqualTo(spousePolicy);
+        assertThat((String) JsonPath.read(reply, "$.steps[1].text")).contains("pays first");
+    }
+
+    @Test
     void aQuestionIsAnsweredWithItsCitations() throws Exception {
         chatModel.nextPlan = "{\"steps\": [\"ASK\"], \"policy\": 2, "
                 + "\"question\": \"What is the physiotherapist maximum per calendar year per person?\"}";

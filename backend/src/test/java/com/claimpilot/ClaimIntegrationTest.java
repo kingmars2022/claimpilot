@@ -128,6 +128,21 @@ class ClaimIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void coordinationOfBenefitsPicksThePlanThatPaysFirst() throws Exception {
+        String decision = mvc.perform(as(token, get("/api/claims/coordination").param("patient", "ME")))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        assertThat((Boolean) JsonPath.read(decision, "$.decided")).isTrue();
+        assertThat((String) JsonPath.read(decision, "$.firstPolicyId")).isEqualTo(ownPolicy);
+        assertThat((String) JsonPath.read(decision, "$.secondPolicyId")).isEqualTo(spousePolicy);
+        assertThat((String) JsonPath.read(decision, "$.relationshipOnSecond")).isEqualTo("SPOUSE");
+
+        String forChild = mvc.perform(as(token, get("/api/claims/coordination").param("patient", "CHILD")))
+                .andReturn().getResponse().getContentAsString();
+        assertThat((String) JsonPath.read(forChild, "$.rule")).isEqualTo("Birthday rule");
+    }
+
+    @Test
     void claimsAreListedNewestFirstOnePageAtATime() throws Exception {
         String first = JsonPath.read(createDraft(), "$.id");
         String second = JsonPath.read(createDraft(), "$.id");

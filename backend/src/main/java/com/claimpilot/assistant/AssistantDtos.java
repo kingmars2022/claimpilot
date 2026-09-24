@@ -58,6 +58,11 @@ public final class AssistantDtos {
         static Step message(String title, String text) {
             return new Step("MESSAGE", title, null, null, null, null, text);
         }
+
+        /** Information about how a step was carried out, for example which plan pays first. */
+        static Step note(String title, String text) {
+            return new Step("NOTE", title, null, null, null, null, text);
+        }
     }
 
     /**

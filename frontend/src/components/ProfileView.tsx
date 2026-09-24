@@ -11,6 +11,8 @@ const EMPTY: Profile = {
   province: null,
   postalCode: null,
   phone: null,
+  spouseName: null,
+  spouseDateOfBirth: null,
 };
 
 const FIELDS: { key: keyof Profile; label: string; type?: string; autoComplete?: string }[] = [
@@ -21,6 +23,8 @@ const FIELDS: { key: keyof Profile; label: string; type?: string; autoComplete?:
   { key: 'province', label: 'Province', autoComplete: 'address-level1' },
   { key: 'postalCode', label: 'Postal code', autoComplete: 'postal-code' },
   { key: 'phone', label: 'Phone', type: 'tel', autoComplete: 'tel' },
+  { key: 'spouseName', label: "Spouse's full name (as on their plan)" },
+  { key: 'spouseDateOfBirth', label: "Spouse's date of birth", type: 'date' },
 ];
 
 const ACTION_LABELS: Record<string, string> = {
@@ -79,8 +83,9 @@ export default function ProfileView() {
       <div className="page-head">
         <h1>My profile</h1>
         <p className="muted">
-          Entered once, reused on every claim form. ClaimPilot never asks for your social insurance number or bank
-          details; forms that need them are left for you to complete.
+          Entered once, reused on every claim form. Your spouse's name and birthday tell ClaimPilot whose plan is whose
+          and which pays first. ClaimPilot never asks for a social insurance number or bank details; forms that need
+          them are left for you to complete.
         </p>
       </div>
       <form className="form profile-form" onSubmit={save}>

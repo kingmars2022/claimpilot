@@ -68,7 +68,7 @@ class ClaimValueAssemblerTest {
     private static Profile profile() {
         Profile profile = new Profile(1L);
         profile.update(new ProfileDto("Fiona Tremblay", LocalDate.of(1991, 4, 17), "4820 rue Fabre", "Montreal", "QC",
-                "H2J 3W1", null));
+                "H2J 3W1", null, null, null));
         return profile;
     }
 }

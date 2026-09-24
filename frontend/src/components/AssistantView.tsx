@@ -217,7 +217,7 @@ function StepView({
     );
   }
   return (
-    <section className="step-card">
+    <section className="step-card" data-type={step.type}>
       <h3>{step.title}</h3>
       <p>{step.text}</p>
     </section>

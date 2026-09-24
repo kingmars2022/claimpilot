@@ -19,6 +19,7 @@ import com.claimpilot.claim.ClaimDraftService;
 import com.claimpilot.claim.ClaimDtos;
 import com.claimpilot.claim.ClaimGuide;
 import com.claimpilot.claim.ClaimGuideService;
+import com.claimpilot.claim.CoordinationService;
 import com.claimpilot.claim.SourceType;
 import com.claimpilot.document.DocumentKind;
 import com.claimpilot.document.DocumentResponse;
@@ -48,9 +49,12 @@ public class AssistantService {
     private final ClaimGuideService guides;
     private final ClaimDraftService drafts;
     private final AuditService audit;
+    private final CoordinationService coordination;
 
     public AssistantService(ChatClient.Builder builder, DocumentService documents, ProfileRepository profiles,
-                            ChatService chat, ClaimGuideService guides, ClaimDraftService drafts, AuditService audit) {
+                            ChatService chat, ClaimGuideService guides, ClaimDraftService drafts, AuditService audit,
+                            CoordinationService coordination) {
+        this.coordination = coordination;
         this.chatClient = builder.build();
         this.documents = documents;
         this.profiles = profiles;
@@ -77,7 +81,7 @@ public class AssistantService {
         } else if (plan.clarify() != null) {
             steps.add(AssistantDtos.Step.clarify(plan.clarify()));
         } else {
-            run(user, plan, context, steps);
+            run(user, plan, context, steps, request.policyId() != null);
         }
         audit.record(user.getId(), AuditAction.ASSISTANT_USED, null, null,
                 plan.actions().isEmpty() ? "no action" : plan.actions().toString());
@@ -85,7 +89,29 @@ public class AssistantService {
                 (System.nanoTime() - started) / 1_000_000);
     }
 
-    private void run(AppUser user, AssistantPlan plan, AssistantContext context, List<AssistantDtos.Step> steps) {
+    /**
+     * Coordination of benefits: a balance is claimed on the plan that pays second. If the plan would
+     * claim on the one that pays first, the plans are swapped, or, when the member picked the plan
+     * themselves, they are told which order the rules give.
+     */
+    private AssistantPlan checkOrder(AppUser user, AssistantPlan plan, boolean chosenByMember,
+                                     List<AssistantDtos.Step> steps) {
+        return coordination.conflictWith(user, plan.policyId(), plan.relationship())
+                .map(decision -> {
+                    if (chosenByMember) {
+                        steps.add(AssistantDtos.Step.note("Check which plan pays first", decision.explanation()));
+                        return plan;
+                    }
+                    steps.add(AssistantDtos.Step.note("Claiming on the plan that pays second",
+                            decision.explanation()));
+                    return plan.withPlans(decision.secondPolicyId(), decision.firstPolicyId(),
+                            decision.relationshipOnSecond());
+                })
+                .orElse(plan);
+    }
+
+    private void run(AppUser user, AssistantPlan plan, AssistantContext context, List<AssistantDtos.Step> steps,
+                     boolean chosenByMember) {
         String policyName = name(context.policies(), plan);
         for (AssistantAction action : plan.actions()) {
             try {
@@ -100,8 +126,9 @@ public class AssistantService {
                                 + " requires", guide));
                     }
                     case FILL -> {
-                        ClaimDtos.Draft draft = drafts.create(user, new ClaimDtos.CreateDraft(plan.claimType(),
-                                plan.policyId(), plan.otherPolicyId(), plan.receiptId(), plan.relationship(), null));
+                        AssistantPlan claim = checkOrder(user, plan, chosenByMember, steps);
+                        ClaimDtos.Draft draft = drafts.create(user, new ClaimDtos.CreateDraft(claim.claimType(),
+                                claim.policyId(), claim.otherPolicyId(), claim.receiptId(), claim.relationship(), null));
                         steps.add(AssistantDtos.Step.claim("Claim form, pre-filled", draft));
                     }
                 }

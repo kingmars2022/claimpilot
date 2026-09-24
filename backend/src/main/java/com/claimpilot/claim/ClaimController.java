@@ -28,12 +28,21 @@ public class ClaimController {
 
     private final ClaimGuideService guides;
     private final ClaimDraftService drafts;
+    private final CoordinationService coordination;
     private final CurrentUserService currentUser;
 
-    public ClaimController(ClaimGuideService guides, ClaimDraftService drafts, CurrentUserService currentUser) {
+    public ClaimController(ClaimGuideService guides, ClaimDraftService drafts, CoordinationService coordination,
+                           CurrentUserService currentUser) {
         this.guides = guides;
         this.drafts = drafts;
+        this.coordination = coordination;
         this.currentUser = currentUser;
+    }
+
+    /** Which of the member's plans pays first for this patient, and which to claim the balance on. */
+    @GetMapping("/coordination")
+    public CoordinationOfBenefits.Decision coordination(@RequestParam CoordinationOfBenefits.Patient patient) {
+        return coordination.decide(currentUser.get(), patient);
     }
 
     @GetMapping("/types")

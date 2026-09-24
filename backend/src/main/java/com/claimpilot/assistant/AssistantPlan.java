@@ -26,6 +26,11 @@ public record AssistantPlan(List<AssistantAction> actions, String question, UUID
                             UUID receiptId, ClaimType claimType, Relationship relationship,
                             AssistantDtos.Clarify clarify) {
 
+    AssistantPlan withPlans(UUID claimOn, UUID paidFirst, Relationship patientRelationship) {
+        return new AssistantPlan(actions, question, claimOn, paidFirst, receiptId, claimType, patientRelationship,
+                clarify);
+    }
+
     static AssistantPlan from(String reply, AssistantContext context, AssistantDtos.Request request) {
         JsonNode root = JsonReply.parse(reply);
 

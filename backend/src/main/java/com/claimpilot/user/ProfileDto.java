@@ -12,14 +12,16 @@ public record ProfileDto(
         @Size(max = 100) String city,
         @Size(max = 50) String province,
         @Size(max = 20) String postalCode,
-        @Size(max = 40) String phone) {
+        @Size(max = 40) String phone,
+        @Size(max = 150) String spouseName,
+        @Past LocalDate spouseDateOfBirth) {
 
     public static ProfileDto from(Profile p) {
         return new ProfileDto(p.getFullName(), p.getDateOfBirth(), p.getStreet(), p.getCity(), p.getProvince(),
-                p.getPostalCode(), p.getPhone());
+                p.getPostalCode(), p.getPhone(), p.getSpouseName(), p.getSpouseDateOfBirth());
     }
 
     public static ProfileDto empty() {
-        return new ProfileDto(null, null, null, null, null, null, null);
+        return new ProfileDto(null, null, null, null, null, null, null, null, null);
     }
 }

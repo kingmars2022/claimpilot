@@ -4,12 +4,20 @@ import {
   type ClaimDraft,
   type ClaimGuide,
   type ClaimType,
+  type Coordination,
   type DraftField,
   type GuideItem,
+  type Patient,
   type Relationship,
   type SourceType,
 } from '../api';
 import { dateTime, Dropzone, errorText, PageRef, uploadAll, useDocuments, useForms } from './shared';
+
+const PATIENTS: { value: Patient; label: string }[] = [
+  { value: 'ME', label: 'Me' },
+  { value: 'SPOUSE', label: 'My spouse' },
+  { value: 'CHILD', label: 'My child' },
+];
 
 const RELATIONSHIPS: { value: Relationship; label: string }[] = [
   { value: 'SPOUSE', label: "I'm the plan member's spouse" },
@@ -113,6 +121,31 @@ function NewClaim({ onCreated }: { onCreated: (draft: ClaimDraft) => void }) {
   const [otherPolicyId, setOtherPolicyId] = useState('');
   const [receiptId, setReceiptId] = useState('');
   const [relationship, setRelationship] = useState<Relationship>('SPOUSE');
+  const [patient, setPatient] = useState<Patient | ''>('');
+  const [coordination, setCoordination] = useState<Coordination | null>(null);
+
+  // Coordination of benefits: once the member says who received the care, the plan that pays first
+  // and the plan to claim the balance on are filled in (still changeable below).
+  useEffect(() => {
+    setCoordination(null);
+    if (!patient) return;
+    let cancelled = false;
+    api.coordination(patient).then(
+      (decision) => {
+        if (cancelled) return;
+        setCoordination(decision);
+        if (decision.decided && decision.firstPolicyId && decision.secondPolicyId && decision.relationshipOnSecond) {
+          setPolicyId(decision.secondPolicyId);
+          setOtherPolicyId(decision.firstPolicyId);
+          setRelationship(decision.relationshipOnSecond);
+        }
+      },
+      (err) => !cancelled && setError(errorText(err)),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [patient]);
   const [guide, setGuide] = useState<ClaimGuide | null>(null);
   const [guideLoading, setGuideLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -172,6 +205,26 @@ function NewClaim({ onCreated }: { onCreated: (draft: ClaimDraft) => void }) {
         <h2>
           <span className="step-number">1</span> The claim
         </h2>
+        <div className="patient-choice" role="radiogroup" aria-label="Who is the claim for?">
+          <span>Who is the claim for?</span>
+          {PATIENTS.map((p) => (
+            <button
+              key={p.value}
+              type="button"
+              className="patient-option"
+              aria-pressed={patient === p.value}
+              onClick={() => setPatient(p.value)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {coordination && (
+          <p className={coordination.decided ? 'coordination' : 'field-hint'}>
+            {coordination.decided && <strong>{coordination.rule}: </strong>}
+            {coordination.explanation}
+          </p>
+        )}
         <div className="form-grid">
           <label>
             Type of care

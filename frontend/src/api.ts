@@ -178,7 +178,7 @@ export interface ActivityEntry {
 export type AssistantAction = 'ASK' | 'GUIDE' | 'FILL';
 
 export interface AssistantStep {
-  type: 'ANSWER' | 'GUIDE' | 'CLAIM' | 'CLARIFY' | 'MESSAGE';
+  type: 'ANSWER' | 'GUIDE' | 'CLAIM' | 'CLARIFY' | 'MESSAGE' | 'NOTE';
   title: string;
   answer: ChatAnswer | null;
   guide: ClaimGuide | null;
@@ -206,6 +206,20 @@ export interface Profile {
   province: string | null;
   postalCode: string | null;
   phone: string | null;
+  spouseName: string | null;
+  spouseDateOfBirth: string | null;
+}
+
+export type Patient = 'ME' | 'SPOUSE' | 'CHILD';
+
+/** Coordination of benefits: which plan pays first, and which to claim the balance on. */
+export interface Coordination {
+  decided: boolean;
+  firstPolicyId: string | null;
+  secondPolicyId: string | null;
+  relationshipOnSecond: Relationship | null;
+  rule: string | null;
+  explanation: string;
 }
 
 export interface LoginResponse {
@@ -327,6 +341,7 @@ export const api = {
   guide: (policyId: string, type: ClaimType) =>
     request<ClaimGuide>(`/api/claims/guide?policyId=${policyId}&type=${type}`),
   drafts: () => request<ClaimDraft[]>('/api/claims'),
+  coordination: (patient: Patient) => request<Coordination>(`/api/claims/coordination?patient=${patient}`),
   draft: (id: string) => request<ClaimDraft>(`/api/claims/${id}`),
   createDraft: (body: {
     claimType: ClaimType;

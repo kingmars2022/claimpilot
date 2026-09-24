@@ -26,6 +26,8 @@ public class Profile {
     private String province;
     private String postalCode;
     private String phone;
+    private String spouseName;
+    private LocalDate spouseDateOfBirth;
 
     @Column(nullable = false)
     private Instant updatedAt;
@@ -47,6 +49,8 @@ public class Profile {
         this.province = blankToNull(dto.province());
         this.postalCode = blankToNull(dto.postalCode());
         this.phone = blankToNull(dto.phone());
+        this.spouseName = blankToNull(dto.spouseName());
+        this.spouseDateOfBirth = dto.spouseDateOfBirth();
         this.updatedAt = Instant.now();
     }
 
@@ -95,6 +99,14 @@ public class Profile {
 
     public String getPhone() {
         return phone;
+    }
+
+    public String getSpouseName() {
+        return spouseName;
+    }
+
+    public LocalDate getSpouseDateOfBirth() {
+        return spouseDateOfBirth;
     }
 
     public Instant getUpdatedAt() {
