@@ -10,7 +10,7 @@ the question, it says so instead of guessing.
 > CompanyBrain retrieves the passage from the employee handbook, answers in one sentence,
 > and links the answer to its source.
 
-<!-- Add a screenshot or a short GIF of the demo here: docs/demo.gif -->
+![CompanyBrain answering a question with a cited source highlighted in the Sources panel](docs/screenshot.png)
 
 ## Why this project
 
