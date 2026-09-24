@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -27,8 +29,19 @@ public class DocumentController {
 
     /** Returns 202 Accepted: the file is stored, indexing continues in the background. */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<DocumentResponse> upload(@RequestParam("file") MultipartFile file) throws IOException {
-        return ResponseEntity.accepted().body(service.upload(file));
+    public ResponseEntity<DocumentResponse> upload(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(name = "departmentIds", required = false) List<Long> departmentIds) throws IOException {
+        return ResponseEntity.accepted().body(service.upload(file, departmentIds));
+    }
+
+    /** Body: {"departmentIds": [1, 3]}; an empty list makes the document visible to everyone. */
+    @PutMapping("/{id}/visibility")
+    public DocumentResponse updateVisibility(@PathVariable UUID id, @RequestBody VisibilityRequest request) {
+        return service.updateVisibility(id, request.departmentIds());
+    }
+
+    public record VisibilityRequest(List<Long> departmentIds) {
     }
 
     @GetMapping

@@ -1,251 +1,91 @@
 package com.companybrain;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.UUID;
-import java.util.concurrent.CopyOnWriteArrayList;
 
-import org.junit.jupiter.api.BeforeEach;
+import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import org.springframework.ai.chat.messages.AssistantMessage;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.model.Generation;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.document.Document;
-import org.springframework.ai.embedding.Embedding;
-import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.ai.embedding.EmbeddingRequest;
-import org.springframework.ai.embedding.EmbeddingResponse;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.context.annotation.Bean;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
-import org.testcontainers.utility.DockerImageName;
 
-import com.companybrain.chat.ChatAnswer;
-import com.companybrain.chat.ChatRequest;
-import com.companybrain.chat.ChatService;
-import com.companybrain.chat.Citation;
 import com.companybrain.chat.PromptBuilder;
-import com.companybrain.document.DocumentResponse;
-import com.companybrain.document.DocumentService;
-import com.companybrain.document.DocumentStatus;
+import com.companybrain.support.IntegrationTestBase;
 
-/**
- * Runs the whole phase 1 flow (upload, background indexing, retrieval, answer, delete) against a
- * real pgvector database. The AI models are replaced by fakes so the test needs no Ollama.
- */
-@Testcontainers
-@SpringBootTest(properties = {
-        "spring.ai.model.chat=none",
-        "spring.ai.model.embedding=none"
-})
-class RagFlowIntegrationTest {
-
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer postgres = new PostgreSQLContainer(
-            DockerImageName.parse("pgvector/pgvector:pg17").asCompatibleSubstituteFor("postgres"));
-
-    @TempDir
-    static Path uploads;
-
-    @DynamicPropertySource
-    static void storage(DynamicPropertyRegistry registry) {
-        registry.add("companybrain.storage.local-root", uploads::toString);
-    }
+/** Phase 1 flow over HTTP: upload, background indexing, retrieval, cited answer, delete. */
+class RagFlowIntegrationTest extends IntegrationTestBase {
 
     private static final String HANDBOOK = """
             # Employee Handbook
 
             ## Vacation
             Full-time employees receive 15 paid vacation days in their first year of service.
-            Vacation requests must be submitted in PeopleHub at least 10 business days in advance.
+            From the third year of service, the annual vacation allowance increases to 20 days.
 
             ## Sick days
             Employees have 7 paid sick days per calendar year.
             """;
 
-    @Autowired
-    DocumentService documentService;
-
-    @Autowired
-    ChatService chatService;
-
-    @Autowired
-    FakeChatModel chatModel;
-
-    @BeforeEach
-    void resetChatModel() {
-        chatModel.prompts.clear();
-    }
-
     @Test
-    void answersFromUploadedDocumentWithCitation() throws Exception {
-        DocumentResponse doc = upload("handbook.md", HANDBOOK);
+    void answersFromUploadedDocumentWithSectionCitation() throws Exception {
+        String token = login("hana");
+        String id = uploadIndexed(token, "handbook.md", HANDBOOK);
+
         // One chunk per Markdown section: "Vacation" and "Sick days".
-        assertThat(waitUntilIndexed(doc.id()).chunkCount()).isEqualTo(2);
+        mvc.perform(as(token, get("/api/documents/" + id)))
+                .andExpect(jsonPath("$.chunkCount").value(2))
+                .andExpect(jsonPath("$.visibleTo").isEmpty());
 
-        ChatAnswer answer = chatService.ask(new ChatRequest("How many vacation days do I get in my first year?"));
+        String answer = ask(token, "How many vacation days do I get in my first year?", null);
 
-        assertThat(answer.grounded()).isTrue();
-        assertThat(answer.answer()).contains("[1]");
-        assertThat(answer.citations()).hasSize(1);
-        Citation citation = answer.citations().getFirst();
-        assertThat(citation.fileName()).isEqualTo("handbook.md");
-        assertThat(citation.section()).isEqualTo("Vacation");
-        assertThat(citation.snippet()).startsWith("Full-time employees receive 15 paid vacation days");
-        assertThat(chatModel.prompts).singleElement().asString().contains("section: Vacation");
-        // The retrieved passage was actually handed to the model.
-        assertThat(chatModel.prompts).singleElement().asString().contains("15 paid vacation days");
+        assertThat((Boolean) JsonPath.read(answer, "$.grounded")).isTrue();
+        assertThat((String) JsonPath.read(answer, "$.citations[0].fileName")).isEqualTo("handbook.md");
+        assertThat((String) JsonPath.read(answer, "$.citations[0].section")).isEqualTo("Vacation");
+        assertThat((String) JsonPath.read(answer, "$.citations[0].snippet"))
+                .startsWith("Full-time employees receive 15 paid vacation days");
+        assertThat(chatModel.answerPrompts).singleElement().asString()
+                .contains("15 paid vacation days")
+                .contains("section: Vacation");
 
-        documentService.delete(doc.id());
+        mvc.perform(as(token, delete("/api/documents/" + id))).andExpect(status().isNoContent());
     }
 
     @Test
     void unrelatedQuestionReturnsFixedTextWithoutCallingModel() throws Exception {
-        DocumentResponse doc = upload("handbook.md", HANDBOOK);
-        waitUntilIndexed(doc.id());
+        String token = login("hana");
+        String id = uploadIndexed(token, "handbook.md", HANDBOOK);
 
-        ChatAnswer answer = chatService.ask(new ChatRequest("Which espresso machine is on floor seven?"));
+        String answer = ask(token, "Which espresso machine is on floor seven?", null);
 
-        assertThat(answer.grounded()).isFalse();
-        assertThat(answer.answer()).isEqualTo(PromptBuilder.NO_ANSWER);
-        assertThat(chatModel.prompts).isEmpty();
+        assertThat((Boolean) JsonPath.read(answer, "$.grounded")).isFalse();
+        assertThat((String) JsonPath.read(answer, "$.answer")).isEqualTo(PromptBuilder.NO_ANSWER);
+        assertThat(chatModel.answerPrompts).isEmpty();
 
-        documentService.delete(doc.id());
+        mvc.perform(as(token, delete("/api/documents/" + id))).andExpect(status().isNoContent());
     }
 
     @Test
     void deletedDocumentIsNoLongerSearched() throws Exception {
-        DocumentResponse doc = upload("handbook.md", HANDBOOK);
-        waitUntilIndexed(doc.id());
+        String token = login("hana");
+        String id = uploadIndexed(token, "handbook.md", HANDBOOK);
 
-        documentService.delete(doc.id());
+        mvc.perform(as(token, delete("/api/documents/" + id))).andExpect(status().isNoContent());
 
-        ChatAnswer answer = chatService.ask(new ChatRequest("How many vacation days do I get in my first year?"));
-        assertThat(answer.answer()).isEqualTo(PromptBuilder.NO_ANSWER);
-        assertThat(documentService.list()).noneMatch(d -> d.id().equals(doc.id()));
+        String answer = ask(token, "How many vacation days do I get in my first year?", null);
+        assertThat((String) JsonPath.read(answer, "$.answer")).isEqualTo(PromptBuilder.NO_ANSWER);
+        mvc.perform(as(token, get("/api/documents/" + id))).andExpect(status().isNotFound());
     }
 
     @Test
-    void rejectsUnsupportedFileType() {
-        assertThatThrownBy(() -> upload("tool.exe", "binary"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Unsupported file type");
-    }
-
-    private DocumentResponse upload(String fileName, String content) throws Exception {
-        return documentService.upload(new MockMultipartFile(
-                "file", fileName, "text/markdown", content.getBytes(StandardCharsets.UTF_8)));
-    }
-
-    private DocumentResponse waitUntilIndexed(UUID id) throws InterruptedException {
-        long deadline = System.nanoTime() + Duration.ofSeconds(20).toNanos();
-        while (System.nanoTime() < deadline) {
-            DocumentResponse doc = documentService.get(id);
-            if (doc.status() == DocumentStatus.FAILED) {
-                throw new AssertionError("Indexing failed: " + doc.errorMessage());
-            }
-            if (doc.status() == DocumentStatus.INDEXED) {
-                return doc;
-            }
-            Thread.sleep(100);
-        }
-        throw new AssertionError("Document " + id + " was not indexed in time");
-    }
-
-    @TestConfiguration
-    static class FakeModels {
-
-        @Bean
-        EmbeddingModel embeddingModel() {
-            return new HashingEmbeddingModel();
-        }
-
-        @Bean
-        FakeChatModel chatModel() {
-            return new FakeChatModel();
-        }
-    }
-
-    /** Answers with a fixed sentence citing source [1] and records every prompt it receives. */
-    static class FakeChatModel implements ChatModel {
-
-        final List<String> prompts = new CopyOnWriteArrayList<>();
-
-        @Override
-        public ChatResponse call(Prompt prompt) {
-            prompts.add(prompt.getContents());
-            return new ChatResponse(List.of(new Generation(new AssistantMessage(
-                    "Full-time employees receive 15 paid vacation days in their first year [1]."))));
-        }
-    }
-
-    /**
-     * Deterministic stand-in for bge-m3: a normalized bag of hashed words in 1024 dimensions.
-     * Texts that share words get a high cosine similarity; unrelated texts score near zero.
-     */
-    static class HashingEmbeddingModel implements EmbeddingModel {
-
-        private static final int DIMENSIONS = 1024;
-
-        @Override
-        public EmbeddingResponse call(EmbeddingRequest request) {
-            List<Embedding> embeddings = new ArrayList<>();
-            List<String> texts = request.getInstructions();
-            for (int i = 0; i < texts.size(); i++) {
-                embeddings.add(new Embedding(vector(texts.get(i)), i));
-            }
-            return new EmbeddingResponse(embeddings);
-        }
-
-        @Override
-        public float[] embed(Document document) {
-            return vector(document.getText());
-        }
-
-        @Override
-        public int dimensions() {
-            return DIMENSIONS;
-        }
-
-        private static float[] vector(String text) {
-            float[] v = new float[DIMENSIONS];
-            for (String word : text.toLowerCase(Locale.ROOT).split("[^a-z0-9]+")) {
-                if (word.length() > 3) {
-                    v[Math.floorMod(word.hashCode(), DIMENSIONS)] += 1f;
-                }
-            }
-            double norm = 0;
-            for (float x : v) {
-                norm += x * x;
-            }
-            if (norm == 0) {
-                v[0] = 1f;
-                return v;
-            }
-            float scale = (float) (1 / Math.sqrt(norm));
-            for (int i = 0; i < DIMENSIONS; i++) {
-                v[i] *= scale;
-            }
-            return v;
-        }
+    void rejectsUnsupportedFileType() throws Exception {
+        String token = login("hana");
+        mvc.perform(as(token, multipart("/api/documents").file(new MockMultipartFile(
+                        "file", "tool.exe", "application/octet-stream", "binary".getBytes(StandardCharsets.UTF_8)))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("Unsupported file type")));
     }
 }

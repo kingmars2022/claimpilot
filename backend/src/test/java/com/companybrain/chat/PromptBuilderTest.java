@@ -8,6 +8,8 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.document.Document;
 
+import com.companybrain.conversation.ChatMessage;
+
 class PromptBuilderTest {
 
     private final PromptBuilder builder = new PromptBuilder();
@@ -44,5 +46,29 @@ class PromptBuilderTest {
     @Test
     void removesReasoningBlocks() {
         assertThat(PromptBuilder.clean("<think>internal</think>\nAnswer [1]")).isEqualTo("Answer [1]");
+    }
+
+    @Test
+    void cleansRewriteOutput() {
+        String original = "And the third year?";
+        assertThat(PromptBuilder.cleanRewrite("\"How many days in the third year?\"", original))
+                .isEqualTo("How many days in the third year?");
+        assertThat(PromptBuilder.cleanRewrite("<think>hmm</think>\nRewritten question: Days in year 3?\nExtra", original))
+                .isEqualTo("Days in year 3?");
+        assertThat(PromptBuilder.cleanRewrite("   ", original)).isEqualTo(original);
+        assertThat(PromptBuilder.cleanRewrite("x".repeat(600), original)).isEqualTo(original);
+    }
+
+    @Test
+    void rewritePromptListsHistoryWithoutCitationMarkers() {
+        String prompt = builder.rewriteUserPrompt(List.of(
+                ChatMessage.question("How many vacation days in year one?", null),
+                ChatMessage.answer("You get 15 days [1].", true, List.of())), "And year three?");
+
+        assertThat(prompt)
+                .contains("Employee: How many vacation days in year one?")
+                .contains("Assistant: You get 15 days .")
+                .doesNotContain("[1]")
+                .endsWith("Follow-up question: And year three?");
     }
 }

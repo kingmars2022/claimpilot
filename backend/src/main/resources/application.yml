@@ -12,6 +12,11 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: none         # schema is owned by Flyway
+  mongodb:
+    uri: mongodb://localhost:27017/companybrain
+  data:
+    mongodb:
+      auto-index-creation: true
   servlet:
     multipart:
       max-file-size: 20MB
@@ -40,6 +45,12 @@ companybrain:
   retrieval:
     top-k: 5
     similarity-threshold: 0.40
+  conversation:
+    history-turns: 3         # earlier question/answer pairs used to rewrite a follow-up
+  security:
+    # Development default only. Set COMPANYBRAIN_SECURITY_JWT_SECRET (32+ characters) anywhere else.
+    jwt-secret: ${COMPANYBRAIN_SECURITY_JWT_SECRET:dev-only-secret-change-me-0123456789abcdef}
+    token-ttl: 8h
 
 management:
   endpoints:

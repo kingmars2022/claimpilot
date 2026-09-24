@@ -8,14 +8,21 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.Filter;
 import org.springframework.stereotype.Service;
 
 import com.companybrain.config.AppProperties;
+import com.companybrain.conversation.ChatMessage;
+import com.companybrain.conversation.Conversation;
+import com.companybrain.conversation.ConversationService;
+import com.companybrain.document.DocumentAccess;
 import com.companybrain.document.IndexingService;
+import com.companybrain.user.AppUser;
 
 /**
- * Retrieval-augmented question answering: find the most relevant chunks, then let the model
- * answer from those chunks only, citing each one as [n].
+ * Retrieval-augmented question answering: find the most relevant chunks the user may see, then
+ * let the model answer from those chunks only, citing each one as [n]. Every exchange is saved to
+ * the user's conversation in MongoDB.
  */
 @Service
 public class ChatService {
@@ -25,40 +32,83 @@ public class ChatService {
     private final ChatClient chatClient;
     private final VectorStore vectorStore;
     private final PromptBuilder promptBuilder;
+    private final ConversationService conversations;
     private final AppProperties.Retrieval retrieval;
+    private final int historyTurns;
 
     public ChatService(ChatClient.Builder chatClientBuilder, VectorStore vectorStore, PromptBuilder promptBuilder,
-                       AppProperties properties) {
+                       ConversationService conversations, AppProperties properties) {
         this.chatClient = chatClientBuilder.build();
         this.vectorStore = vectorStore;
         this.promptBuilder = promptBuilder;
+        this.conversations = conversations;
         this.retrieval = properties.retrieval();
+        this.historyTurns = properties.conversation().historyTurns();
     }
 
-    public ChatAnswer ask(ChatRequest request) {
+    /**
+     * Answers a question for one user. Retrieval only sees chunks the user may access, and a
+     * follow-up in an existing conversation is first rewritten into a standalone question.
+     */
+    public ChatAnswer ask(ChatRequest request, AppUser user) {
         long start = System.nanoTime();
-        List<Document> sources = vectorStore.similaritySearch(SearchRequest.builder()
-                .query(request.question())
-                .topK(retrieval.topK())
-                .similarityThreshold(retrieval.similarityThreshold())
-                .build());
+        String question = request.question().strip();
+        Conversation conversation = request.conversationId() == null || request.conversationId().isBlank()
+                ? Conversation.start(user.getUsername(), question)
+                : conversations.getOwned(request.conversationId(), user.getUsername());
 
-        // Nothing relevant: answer honestly without spending a model call.
+        String searchQuery = standaloneQuestion(conversation, question);
+        List<Document> sources = vectorStore.similaritySearch(searchRequest(searchQuery, user));
+
+        String answer;
+        List<Citation> citations;
         if (sources.isEmpty()) {
-            return new ChatAnswer(PromptBuilder.NO_ANSWER, false, List.of(), elapsedMs(start));
-        }
-
-        String answer = PromptBuilder.clean(chatClient.prompt()
-                .system(promptBuilder.systemPrompt())
-                .user(promptBuilder.userPrompt(request.question(), sources))
-                .call()
-                .content());
-
-        List<Citation> citations = citationsUsed(answer, sources);
-        if (answer.isBlank()) {
+            // Nothing relevant (or nothing this user may see): answer honestly without a model call.
             answer = PromptBuilder.NO_ANSWER;
+            citations = List.of();
+        } else {
+            answer = PromptBuilder.clean(chatClient.prompt()
+                    .system(promptBuilder.systemPrompt())
+                    .user(promptBuilder.userPrompt(searchQuery, sources))
+                    .call()
+                    .content());
+            citations = citationsUsed(answer, sources);
+            if (answer.isBlank()) {
+                answer = PromptBuilder.NO_ANSWER;
+            }
         }
-        return new ChatAnswer(answer, !citations.isEmpty(), citations, elapsedMs(start));
+
+        boolean grounded = !citations.isEmpty();
+        String rewritten = searchQuery.equals(question) ? null : searchQuery;
+        conversation.append(ChatMessage.question(question, rewritten), ChatMessage.answer(answer, grounded, citations));
+        Conversation saved = conversations.save(conversation);
+        return new ChatAnswer(answer, grounded, citations, elapsedMs(start), saved.getId(), rewritten);
+    }
+
+    /** The question as asked, or, for a follow-up, rewritten with the context of earlier turns. */
+    private String standaloneQuestion(Conversation conversation, String question) {
+        List<ChatMessage> history = conversation.recentMessages(historyTurns);
+        if (history.isEmpty()) {
+            return question;
+        }
+        String output = chatClient.prompt()
+                .system(promptBuilder.rewriteSystemPrompt())
+                .user(promptBuilder.rewriteUserPrompt(history, question))
+                .call()
+                .content();
+        return PromptBuilder.cleanRewrite(output, question);
+    }
+
+    private SearchRequest searchRequest(String query, AppUser user) {
+        SearchRequest.Builder builder = SearchRequest.builder()
+                .query(query)
+                .topK(retrieval.topK())
+                .similarityThreshold(retrieval.similarityThreshold());
+        Filter.Expression filter = DocumentAccess.filterFor(user);
+        if (filter != null) {
+            builder.filterExpression(filter);
+        }
+        return builder.build();
     }
 
     /** Returns only the sources the model actually cited, keeping the model's numbering. */

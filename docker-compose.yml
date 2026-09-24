@@ -17,9 +17,24 @@ services:
       timeout: 3s
       retries: 10
 
+  # Conversation history (phase 2)
+  mongo:
+    image: mongo:7.0
+    container_name: companybrain-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   # Added in later phases (started with --profile when needed):
   # redis    (phase 5, profile "cache")
   # kafka    (phase 3, profile "events")
 
 volumes:
   pgdata:
+  mongodata:

@@ -9,6 +9,7 @@ import java.util.regex.Pattern;
 import org.springframework.ai.document.Document;
 import org.springframework.stereotype.Component;
 
+import com.companybrain.conversation.ChatMessage;
 import com.companybrain.document.IndexingService;
 
 /**
@@ -26,6 +27,10 @@ public class PromptBuilder {
             "I couldn't find this in the company knowledge base. Try rephrasing, or ask the team that owns this topic.";
 
     private static final Pattern CITATION = Pattern.compile("\\[(\\d{1,2})]");
+    private static final Pattern REWRITE_LABEL =
+            Pattern.compile("^(rewritten|standalone)?\\s*question\\s*:\\s*", Pattern.CASE_INSENSITIVE);
+    private static final int HISTORY_ANSWER_LENGTH = 400;
+    private static final int MAX_REWRITE_LENGTH = 500;
     private static final Pattern THINK_BLOCK = Pattern.compile("(?s)<think>.*?</think>");
 
     public String systemPrompt() {
@@ -62,6 +67,50 @@ public class PromptBuilder {
         // Repeated last: small local models tend to copy the language of the sources otherwise.
         sb.append("\n\n").append(ANSWER_LANGUAGE_REMINDER);
         return sb.toString();
+    }
+
+    /** Instructions for turning a follow-up into a standalone search question. */
+    public String rewriteSystemPrompt() {
+        return """
+                You rewrite an employee's follow-up question so that it can be understood without the conversation.
+                It will be used to search company documents.
+
+                Rules:
+                1. Replace words like "it", "that" or "the third year" with what they refer to in the conversation.
+                2. If the question already stands on its own, output it unchanged.
+                3. Output only the rewritten question, in English, on a single line. Do not answer it. No quotes, no explanation.
+                """;
+    }
+
+    public String rewriteUserPrompt(List<ChatMessage> history, String question) {
+        StringBuilder sb = new StringBuilder("Conversation so far:\n");
+        for (ChatMessage message : history) {
+            boolean employee = message.sender() == ChatMessage.Sender.EMPLOYEE;
+            String text = employee ? message.content() : CITATION.matcher(message.content()).replaceAll("");
+            sb.append(employee ? "Employee: " : "Assistant: ").append(shorten(text, HISTORY_ANSWER_LENGTH)).append('\n');
+        }
+        sb.append("\nFollow-up question: ").append(question.strip());
+        return sb.toString();
+    }
+
+    /**
+     * Takes the first non-empty line of the model's rewrite, without quotes or a label. Falls back
+     * to the original question when the output is unusable.
+     */
+    public static String cleanRewrite(String output, String original) {
+        String text = clean(output);
+        String line = text.lines().map(String::strip).filter(l -> !l.isEmpty()).findFirst().orElse("");
+        line = REWRITE_LABEL.matcher(line).replaceFirst("");
+        line = line.replaceAll("^[\"'“”‘’]+|[\"'“”‘’]+$", "").strip();
+        if (line.isEmpty() || line.length() > MAX_REWRITE_LENGTH) {
+            return original.strip();
+        }
+        return line;
+    }
+
+    private static String shorten(String text, int max) {
+        String flat = text.strip().replaceAll("\\s+", " ");
+        return flat.length() <= max ? flat : flat.substring(0, max) + "…";
     }
 
     /** Source numbers referenced in the answer, in order of first appearance. */

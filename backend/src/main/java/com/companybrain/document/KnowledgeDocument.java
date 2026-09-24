@@ -1,16 +1,25 @@
 package com.companybrain.document;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.Table;
+
+import com.companybrain.user.Department;
 
 /**
  * A file in the knowledge base. Its text lives as vector chunks in the vector_store table,
@@ -49,17 +58,31 @@ public class KnowledgeDocument {
 
     private Instant indexedAt;
 
+    /** Departments that may see this document; empty means the whole company. */
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(name = "document_departments",
+            joinColumns = @JoinColumn(name = "document_id"),
+            inverseJoinColumns = @JoinColumn(name = "department_id"))
+    private Set<Department> departments = new HashSet<>();
+
     protected KnowledgeDocument() {
         // for JPA
     }
 
-    public KnowledgeDocument(String fileName, String contentType, long sizeBytes, String storageKey) {
+    public KnowledgeDocument(String fileName, String contentType, long sizeBytes, String storageKey,
+                             Collection<Department> departments) {
+        this.departments = new HashSet<>(departments);
         this.fileName = fileName;
         this.contentType = contentType;
         this.sizeBytes = sizeBytes;
         this.storageKey = storageKey;
         this.status = DocumentStatus.UPLOADED;
         this.createdAt = Instant.now();
+    }
+
+    public void restrictTo(Collection<Department> departments) {
+        this.departments.clear();
+        this.departments.addAll(departments);
     }
 
     public void markProcessing() {
@@ -117,5 +140,9 @@ public class KnowledgeDocument {
 
     public Instant getIndexedAt() {
         return indexedAt;
+    }
+
+    public Set<Department> getDepartments() {
+        return departments;
     }
 }

@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -37,15 +38,17 @@ public class IndexingService {
     private final FileStorage storage;
     private final DocumentReaderFactory readerFactory;
     private final VectorStore vectorStore;
+    private final DocumentAccess access;
     private final TokenTextSplitter splitter;
 
     public IndexingService(DocumentRepository repository, FileStorage storage,
                            DocumentReaderFactory readerFactory, VectorStore vectorStore,
-                           AppProperties properties) {
+                           DocumentAccess access, AppProperties properties) {
         this.repository = repository;
         this.storage = storage;
         this.readerFactory = readerFactory;
         this.vectorStore = vectorStore;
+        this.access = access;
         this.splitter = TokenTextSplitter.builder()
                 .withChunkSize(properties.indexing().chunkSize())
                 .withMinChunkSizeChars(100)
@@ -62,6 +65,7 @@ public class IndexingService {
         doc.markProcessing();
         repository.save(doc);
 
+        int chunkCount;
         try {
             List<Document> pages = readerFactory.read(storage.load(doc.getStorageKey()), doc.getFileName());
             List<Document> chunks = toChunks(splitter.apply(pages), doc);
@@ -69,13 +73,33 @@ public class IndexingService {
                 throw new IllegalStateException("No readable text found. Scanned PDFs need OCR first.");
             }
             vectorStore.add(chunks);
-            doc.markIndexed(chunks.size());
-            log.info("Indexed {} ({} chunks)", doc.getFileName(), chunks.size());
+            chunkCount = chunks.size();
         } catch (Exception ex) {
             log.error("Indexing failed for {}", doc.getFileName(), ex);
-            doc.markFailed(ex.getMessage());
+            repository.findById(documentId).ifPresent(fresh -> {
+                fresh.markFailed(ex.getMessage());
+                repository.save(fresh);
+            });
+            return;
         }
-        repository.save(doc);
+        finish(documentId, chunkCount);
+    }
+
+    /**
+     * Records the result on a freshly loaded row. Saving the copy loaded before indexing would
+     * overwrite a visibility change made in the meantime.
+     */
+    private void finish(UUID documentId, int chunkCount) {
+        KnowledgeDocument fresh = repository.findById(documentId).orElse(null);
+        if (fresh == null) {
+            // Deleted while indexing: remove the chunks just added so nothing is left orphaned.
+            vectorStore.delete(new FilterExpressionBuilder().eq(META_DOCUMENT_ID, documentId.toString()).build());
+            return;
+        }
+        access.applyToVectors(fresh);  // picks up a visibility change made during indexing
+        fresh.markIndexed(chunkCount);
+        repository.save(fresh);
+        log.info("Indexed {} ({} chunks)", fresh.getFileName(), chunkCount);
     }
 
     /** Copies each chunk with the metadata needed for citations and deletion. */
@@ -91,6 +115,7 @@ public class IndexingService {
             metadata.put(META_DOCUMENT_ID, doc.getId().toString());
             metadata.put(META_FILE_NAME, doc.getFileName());
             metadata.put(META_CHUNK_INDEX, index++);
+            metadata.put(DocumentAccess.META_ACCESS, DocumentAccess.accessList(doc));
             Object page = chunk.getMetadata().get(PDF_PAGE_KEY);
             if (page != null) {
                 metadata.put(META_PAGE, page);
