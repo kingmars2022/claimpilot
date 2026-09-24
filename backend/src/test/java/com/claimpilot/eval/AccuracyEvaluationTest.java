@@ -43,7 +43,7 @@ import com.claimpilot.samples.SampleDocuments;
 @Tag("eval")
 @SpringBootTest(properties = "claimpilot.cache.model-requests-per-minute=100000")
 @AutoConfigureMockMvc
-class AccuracyEvaluation {
+class AccuracyEvaluationTest {
 
     @ServiceConnection
     static final PostgreSQLContainer postgres = new PostgreSQLContainer(

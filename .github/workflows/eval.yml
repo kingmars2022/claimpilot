@@ -30,7 +30,7 @@ jobs:
           ollama pull bge-m3
       - name: Run the evaluation
         working-directory: backend
-        run: ./mvnw -B test -Peval
+        run: ./mvnw -B test -Peval -Dtest=AccuracyEvaluationTest
       - name: Publish the report
         if: always()
         run: |
