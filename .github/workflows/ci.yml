@@ -20,7 +20,7 @@ jobs:
           cache: maven
       - name: Install Tesseract (OCR tests)
         run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
-      - name: Run tests (Testcontainers: pgvector, MongoDB, Kafka, Redis, RustFS)
+      - name: Run tests with Testcontainers (pgvector, MongoDB, Kafka, Redis, RustFS)
         working-directory: backend
         run: ./mvnw -B test
       - name: Test report
