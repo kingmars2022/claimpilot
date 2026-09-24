@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.claimpilot.common.NotFoundException;
+import com.claimpilot.conversation.ConversationRepository;
 import com.claimpilot.extraction.DocumentFactRepository;
 import com.claimpilot.extraction.ExtractionLogRepository;
 import com.claimpilot.storage.FileStorage;
@@ -30,16 +31,18 @@ public class DocumentService {
     private final VectorStore vectorStore;
     private final DocumentFactRepository facts;
     private final ExtractionLogRepository extractionLogs;
+    private final ConversationRepository conversations;
 
     public DocumentService(DocumentRepository repository, FileStorage storage, ProcessingService processing,
                            VectorStore vectorStore, DocumentFactRepository facts,
-                           ExtractionLogRepository extractionLogs) {
+                           ExtractionLogRepository extractionLogs, ConversationRepository conversations) {
         this.repository = repository;
         this.storage = storage;
         this.processing = processing;
         this.vectorStore = vectorStore;
         this.facts = facts;
         this.extractionLogs = extractionLogs;
+        this.conversations = conversations;
     }
 
     /**
@@ -91,10 +94,16 @@ public class DocumentService {
         return repository.findById(id).map(UploadedDocument::getFileName);
     }
 
-    /** Removes the vectors, the facts, the extraction logs, the stored file and the row. */
+    /**
+     * Removes the vectors, the facts, the extraction logs, the stored file and the row. Deleting a
+     * policy also deletes the questions asked about it, since they can no longer be continued.
+     */
     public void delete(AppUser owner, DocumentKind kind, UUID id) {
         UploadedDocument doc = find(owner, kind, id);
         remove(doc);
+        if (kind == DocumentKind.POLICY) {
+            conversations.deleteByOwnerAndPolicyId(owner.getUsername(), id);
+        }
     }
 
     /** Removes every file of this user (used when the account is deleted). */

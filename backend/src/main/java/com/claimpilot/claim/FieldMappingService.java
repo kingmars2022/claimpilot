@@ -24,9 +24,12 @@ import com.claimpilot.extraction.JsonReply;
 @Service
 public class FieldMappingService {
 
-    /** Fields whose label mentions these are forced to stay blank, whatever the model says. */
+    /**
+     * Fields whose label mentions these are forced to stay blank, whatever the model says. "certify"
+     * rather than "certif", so that "Certificate number" can still be filled.
+     */
     static final Pattern PERSONAL_ATTESTATION = Pattern.compile(
-            "(?i)sign|declar|certif|attest|authori[sz]|consent|j'atteste|je certifie");
+            "(?i)sign|declar|certify|attest|authori[sz]|consent|j'atteste|je certifie");
 
     private static final Logger log = LoggerFactory.getLogger(FieldMappingService.class);
 
