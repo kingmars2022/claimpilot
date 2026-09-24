@@ -205,33 +205,19 @@ public abstract class IntegrationTestBase {
         }
     }
 
-    /**
-     * Records every prompt. Answers cite source [1]; follow-up rewrites return {@link #rewriteTo}.
-     */
+    /** Records every prompt and answers with a sentence that cites source [1]. */
     public static class FakeChatModel implements ChatModel {
 
-        public final List<String> answerPrompts = new CopyOnWriteArrayList<>();
-        public final List<String> rewritePrompts = new CopyOnWriteArrayList<>();
-        public volatile String rewriteTo = "";
+        public final List<String> prompts = new CopyOnWriteArrayList<>();
 
         void reset() {
-            answerPrompts.clear();
-            rewritePrompts.clear();
-            rewriteTo = "";
+            prompts.clear();
         }
 
         @Override
         public ChatResponse call(Prompt prompt) {
-            String contents = prompt.getContents();
-            String reply;
-            if (contents.contains("Follow-up question:")) {
-                rewritePrompts.add(contents);
-                reply = rewriteTo;
-            } else {
-                answerPrompts.add(contents);
-                reply = "Here is what the policy says [1].";
-            }
-            return new ChatResponse(List.of(new Generation(new AssistantMessage(reply))));
+            prompts.add(prompt.getContents());
+            return new ChatResponse(List.of(new Generation(new AssistantMessage("Here is what the policy says [1]."))));
         }
     }
 

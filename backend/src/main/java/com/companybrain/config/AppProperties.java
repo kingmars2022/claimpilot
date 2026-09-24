@@ -35,7 +35,7 @@ public record AppProperties(Storage storage, Indexing indexing, Retrieval retrie
     }
 
     /**
-     * @param historyTurns how many earlier question/answer pairs are used to rewrite a follow-up question
+     * @param historyTurns how many earlier question/answer pairs are given to the model as context for a follow-up
      */
     public record Conversation(int historyTurns) {
     }

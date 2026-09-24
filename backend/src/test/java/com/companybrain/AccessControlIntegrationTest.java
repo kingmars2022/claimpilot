@@ -84,11 +84,11 @@ class AccessControlIntegrationTest extends IntegrationTestBase {
         assertThat(grounded(ask(hrManager, QUESTION, null))).isTrue();
         assertThat(grounded(ask(admin, QUESTION, null))).isTrue();
 
-        int promptsBefore = chatModel.answerPrompts.size();
+        int promptsBefore = chatModel.prompts.size();
         String itAnswer = ask(itEmployee, QUESTION, null);
         assertThat(grounded(itAnswer)).isFalse();
         // The restricted chunk never reached the model: no answer call was made at all.
-        assertThat(chatModel.answerPrompts).hasSize(promptsBefore);
+        assertThat(chatModel.prompts).hasSize(promptsBefore);
 
         // Company-wide: the IT employee can now find it. Only chunk metadata changes, no re-indexing.
         setVisibility(hrManager, id, List.of());

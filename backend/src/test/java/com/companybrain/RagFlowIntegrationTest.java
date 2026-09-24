@@ -47,7 +47,7 @@ class RagFlowIntegrationTest extends IntegrationTestBase {
         assertThat((String) JsonPath.read(answer, "$.citations[0].section")).isEqualTo("Vacation");
         assertThat((String) JsonPath.read(answer, "$.citations[0].snippet"))
                 .startsWith("Full-time employees receive 15 paid vacation days");
-        assertThat(chatModel.answerPrompts).singleElement().asString()
+        assertThat(chatModel.prompts).singleElement().asString()
                 .contains("15 paid vacation days")
                 .contains("section: Vacation");
 
@@ -63,7 +63,7 @@ class RagFlowIntegrationTest extends IntegrationTestBase {
 
         assertThat((Boolean) JsonPath.read(answer, "$.grounded")).isFalse();
         assertThat((String) JsonPath.read(answer, "$.answer")).isEqualTo(PromptBuilder.NO_ANSWER);
-        assertThat(chatModel.answerPrompts).isEmpty();
+        assertThat(chatModel.prompts).isEmpty();
 
         mvc.perform(as(token, delete("/api/documents/" + id))).andExpect(status().isNoContent());
     }

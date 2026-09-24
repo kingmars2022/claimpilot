@@ -45,8 +45,6 @@ export interface ChatAnswer {
   citations: Citation[];
   latencyMs: number;
   conversationId: string;
-  /** The standalone question that was searched, when a follow-up was rewritten. */
-  searchQuery: string | null;
 }
 
 export interface ConversationSummary {
@@ -58,7 +56,6 @@ export interface ConversationSummary {
 export interface ChatMessage {
   sender: 'EMPLOYEE' | 'ASSISTANT';
   content: string;
-  searchQuery: string | null;
   grounded: boolean | null;
   citations: Citation[];
   createdAt: string;

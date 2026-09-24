@@ -20,7 +20,7 @@ class PromptBuilderTest {
                 new Document("Employees get 15 vacation days.", Map.of("fileName", "handbook.pdf", "page", 4)),
                 new Document("Client meals are reimbursed.", Map.of("fileName", "expenses.md")));
 
-        String prompt = builder.userPrompt("How many days?", sources);
+        String prompt = builder.userPrompt("How many days?", sources, List.of());
 
         assertThat(prompt)
                 .contains("[1] (file: handbook.pdf, page 4)")
@@ -49,26 +49,28 @@ class PromptBuilderTest {
     }
 
     @Test
-    void cleansRewriteOutput() {
-        String original = "And the third year?";
-        assertThat(PromptBuilder.cleanRewrite("\"How many days in the third year?\"", original))
-                .isEqualTo("How many days in the third year?");
-        assertThat(PromptBuilder.cleanRewrite("<think>hmm</think>\nRewritten question: Days in year 3?\nExtra", original))
-                .isEqualTo("Days in year 3?");
-        assertThat(PromptBuilder.cleanRewrite("   ", original)).isEqualTo(original);
-        assertThat(PromptBuilder.cleanRewrite("x".repeat(600), original)).isEqualTo(original);
+    void followUpPromptIncludesEarlierTurnsWithoutOldCitationMarkers() {
+        List<Document> sources = List.of(new Document("From the third year: 20 days.", Map.of("fileName", "h.md")));
+        String prompt = builder.userPrompt("And year three?", sources, List.of(
+                ChatMessage.question("How many vacation days in year one?"),
+                ChatMessage.answer("You get 15 days [1].", true, List.of())));
+
+        assertThat(prompt)
+                .startsWith("Earlier in this conversation:")
+                .contains("Employee: How many vacation days in year one?")
+                .contains("Assistant: You get 15 days .")
+                .contains("[1] (file: h.md)")
+                .contains("Question: And year three?");
     }
 
     @Test
-    void rewritePromptListsHistoryWithoutCitationMarkers() {
-        String prompt = builder.rewriteUserPrompt(List.of(
-                ChatMessage.question("How many vacation days in year one?", null),
-                ChatMessage.answer("You get 15 days [1].", true, List.of())), "And year three?");
+    void contextualQueryAddsThePreviousQuestion() {
+        List<ChatMessage> history = List.of(
+                ChatMessage.question("How many vacation days in year one?"),
+                ChatMessage.answer("15 days [1].", true, List.of()));
 
-        assertThat(prompt)
-                .contains("Employee: How many vacation days in year one?")
-                .contains("Assistant: You get 15 days .")
-                .doesNotContain("[1]")
-                .endsWith("Follow-up question: And year three?");
+        assertThat(PromptBuilder.contextualQuery(history, "And year three?"))
+                .isEqualTo("How many vacation days in year one?\nAnd year three?");
+        assertThat(PromptBuilder.contextualQuery(List.of(), "Hello?")).isEqualTo("Hello?");
     }
 }

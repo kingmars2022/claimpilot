@@ -51,8 +51,9 @@ know internal policies and may invent them. CompanyBrain uses retrieval-augmente
 - Role and department are read from the database on every request, so an admin's change applies
   immediately, even to tokens that were already issued.
 - Conversation history is stored in MongoDB. A follow-up such as *"And from the third year?"* is
-  first rewritten by the model into a standalone question, which is then used for retrieval; the
-  interface shows what was actually searched.
+  searched both on its own and together with the previous question, and the model receives the
+  last few turns as context. Follow-ups cost no extra model call, so they are as fast as a first
+  question.
 
 ## Architecture
 
@@ -156,7 +157,7 @@ All endpoints except login need `Authorization: Bearer <token>`.
 | `POST` | `/api/auth/login` | Anyone | `{ "username", "password" }` → token, expiry and user. |
 | `GET` | `/api/auth/me` | Signed in | The current user with role and department. |
 | `GET` | `/api/departments` | Signed in | All departments. |
-| `POST` | `/api/chat` | Signed in | `{ "question", "conversationId"? }` → cited answer, conversation id, rewritten search query. |
+| `POST` | `/api/chat` | Signed in | `{ "question", "conversationId"? }` → cited answer and conversation id. |
 | `GET` | `/api/conversations` | Signed in | Your conversations, most recent first. |
 | `GET` / `DELETE` | `/api/conversations/{id}` | Owner | One conversation with its messages. |
 | `POST` | `/api/documents` | Knowledge manager, admin | Upload (multipart `file`, optional `departmentIds`). Returns `202`. |
@@ -176,14 +177,14 @@ cd backend
 ./mvnw test
 ```
 
-- Unit tests cover prompt building, citation parsing, follow-up rewriting, Markdown sections and
+- Unit tests cover prompt building, citation parsing, follow-up context, result merging, Markdown sections and
   access rules.
 - Integration tests start the whole application over HTTP (MockMvc) against real pgvector and
   MongoDB databases in Docker (Testcontainers):
   - `RagFlowIntegrationTest`: upload → background indexing → retrieval → cited answer → delete.
   - `AccessControlIntegrationTest`: sign-in, role checks, and a department-restricted document that
     reaches only that department, including after its visibility or a user's department changes.
-  - `ConversationIntegrationTest`: follow-up rewriting, saved history, and privacy between users.
+  - `ConversationIntegrationTest`: follow-ups in one model call, saved history, and privacy between users.
 - The chat and embedding models are replaced by deterministic fakes, so the tests need Docker but
   not Ollama.
 
@@ -208,9 +209,11 @@ cd backend
 - **MongoDB for conversations.** A conversation is always read and written as a whole and has no
   fixed shape, so it is stored as one document with its messages embedded. Relational data (users,
   departments, documents) stays in PostgreSQL.
-- **Rewrite follow-ups before searching.** "And from the third year?" alone matches nothing useful.
-  One extra model call turns it into a complete question; the first question of a conversation
-  skips this step.
+- **Follow-ups without an extra model call.** "And from the third year?" alone matches nothing
+  useful. Rewriting it with the model first would add a second model call, several seconds on a
+  local 8B model. Instead, the question is searched twice, alone and joined with the previous question, and the
+  results are merged by score; embedding lookups take milliseconds. The model then gets the last
+  turns as context and still has to take every fact from the sources.
 - **Fixed "not found" text.** The fallback answer is defined in code, not generated,
   so it is predictable and testable.
 - **bge-m3 embeddings.** The demo is English only, but bge-m3 is multilingual, so French or other

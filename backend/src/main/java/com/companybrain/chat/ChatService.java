@@ -1,7 +1,10 @@
 package com.companybrain.chat;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.springframework.ai.chat.client.ChatClient;
@@ -48,7 +51,7 @@ public class ChatService {
 
     /**
      * Answers a question for one user. Retrieval only sees chunks the user may access, and a
-     * follow-up in an existing conversation is first rewritten into a standalone question.
+     * follow-up in an existing conversation is answered with the earlier turns as context.
      */
     public ChatAnswer ask(ChatRequest request, AppUser user) {
         long start = System.nanoTime();
@@ -57,8 +60,8 @@ public class ChatService {
                 ? Conversation.start(user.getUsername(), question)
                 : conversations.getOwned(request.conversationId(), user.getUsername());
 
-        String searchQuery = standaloneQuestion(conversation, question);
-        List<Document> sources = vectorStore.similaritySearch(searchRequest(searchQuery, user));
+        List<ChatMessage> history = conversation.recentMessages(historyTurns);
+        List<Document> sources = retrieve(question, history, user);
 
         String answer;
         List<Citation> citations;
@@ -69,7 +72,7 @@ public class ChatService {
         } else {
             answer = PromptBuilder.clean(chatClient.prompt()
                     .system(promptBuilder.systemPrompt())
-                    .user(promptBuilder.userPrompt(searchQuery, sources))
+                    .user(promptBuilder.userPrompt(question, sources, history))
                     .call()
                     .content());
             citations = citationsUsed(answer, sources);
@@ -79,24 +82,48 @@ public class ChatService {
         }
 
         boolean grounded = !citations.isEmpty();
-        String rewritten = searchQuery.equals(question) ? null : searchQuery;
-        conversation.append(ChatMessage.question(question, rewritten), ChatMessage.answer(answer, grounded, citations));
+        conversation.append(ChatMessage.question(question), ChatMessage.answer(answer, grounded, citations));
         Conversation saved = conversations.save(conversation);
-        return new ChatAnswer(answer, grounded, citations, elapsedMs(start), saved.getId(), rewritten);
+        return new ChatAnswer(answer, grounded, citations, elapsedMs(start), saved.getId());
     }
 
-    /** The question as asked, or, for a follow-up, rewritten with the context of earlier turns. */
-    private String standaloneQuestion(Conversation conversation, String question) {
-        List<ChatMessage> history = conversation.recentMessages(historyTurns);
-        if (history.isEmpty()) {
-            return question;
+    /**
+     * Finds the passages for a question. A follow-up such as "And from the third year?" is also
+     * searched together with the previous question, and the two result lists are merged by
+     * score. This costs one extra embedding lookup (milliseconds) instead of an extra model call
+     * to rewrite the question (seconds on a local model). Searching the question on its own as
+     * well keeps a change of topic within the same conversation working.
+     */
+    private List<Document> retrieve(String question, List<ChatMessage> history, AppUser user) {
+        List<Document> direct = vectorStore.similaritySearch(searchRequest(question, user));
+        String contextual = PromptBuilder.contextualQuery(history, question);
+        if (contextual.equals(question)) {
+            return direct;
         }
-        String output = chatClient.prompt()
-                .system(promptBuilder.rewriteSystemPrompt())
-                .user(promptBuilder.rewriteUserPrompt(history, question))
-                .call()
-                .content();
-        return PromptBuilder.cleanRewrite(output, question);
+        List<Document> withContext = vectorStore.similaritySearch(searchRequest(contextual, user));
+        return mergeByScore(direct, withContext, retrieval.topK());
+    }
+
+    /** Keeps each chunk once with its best score, highest first, at most {@code limit}. */
+    static List<Document> mergeByScore(List<Document> first, List<Document> second, int limit) {
+        Map<String, Document> best = new LinkedHashMap<>();
+        for (Document doc : concat(first, second)) {
+            best.merge(doc.getId(), doc, (a, b) -> score(b) > score(a) ? b : a);
+        }
+        return best.values().stream()
+                .sorted(Comparator.comparingDouble(ChatService::score).reversed())
+                .limit(limit)
+                .toList();
+    }
+
+    private static List<Document> concat(List<Document> a, List<Document> b) {
+        List<Document> all = new ArrayList<>(a);
+        all.addAll(b);
+        return all;
+    }
+
+    private static double score(Document doc) {
+        return doc.getScore() == null ? 0 : doc.getScore();
     }
 
     private SearchRequest searchRequest(String query, AppUser user) {

@@ -12,8 +12,6 @@ interface Answer {
 interface Turn {
   id: number;
   question: string;
-  /** Set when a follow-up was rewritten into a standalone search. */
-  searchQuery: string | null;
   answer?: Answer;
   error?: string;
 }
@@ -36,7 +34,6 @@ function toTurns(conversation: Conversation, firstId: number): Turn[] {
     turns.push({
       id: firstId + turns.length,
       question: question.content,
-      searchQuery: question.searchQuery,
       answer: {
         text: answer.content,
         grounded: answer.grounded ?? false,
@@ -116,7 +113,7 @@ export default function AskView() {
     const text = question.trim();
     if (!text || pending) return;
     const id = nextId.current++;
-    setTurns((prev) => [...prev, { id, question: text, searchQuery: null }]);
+    setTurns((prev) => [...prev, { id, question: text }]);
     setDraft('');
     setPending(true);
     try {
@@ -127,9 +124,7 @@ export default function AskView() {
         citations: response.citations,
         latencyMs: response.latencyMs,
       };
-      setTurns((prev) =>
-        prev.map((turn) => (turn.id === id ? { ...turn, answer, searchQuery: response.searchQuery } : turn)),
-      );
+      setTurns((prev) => prev.map((turn) => (turn.id === id ? { ...turn, answer } : turn)));
       setConversationId(response.conversationId);
       setActiveTurnId(id);
       setActiveCitation(null);
@@ -232,7 +227,6 @@ export default function AskView() {
         {turns.map((turn) => (
           <article key={turn.id} className="turn" aria-current={turn.id === activeTurnId ? 'true' : undefined}>
             <p className="question">{turn.question}</p>
-            {turn.searchQuery && <p className="search-query">Searched for: {turn.searchQuery}</p>}
 
             {!turn.answer && !turn.error && <p className="pending">Finding the answer…</p>}
 

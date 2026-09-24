@@ -16,7 +16,7 @@ import org.springframework.http.MediaType;
 
 import com.companybrain.support.IntegrationTestBase;
 
-/** Conversation history in MongoDB and follow-up rewriting. */
+/** Conversation history in MongoDB and follow-up questions. */
 class ConversationIntegrationTest extends IntegrationTestBase {
 
     private static final String HANDBOOK = """
@@ -28,36 +28,34 @@ class ConversationIntegrationTest extends IntegrationTestBase {
             """;
 
     @Test
-    void followUpIsRewrittenSearchedAndSaved() throws Exception {
+    void followUpIsAnsweredWithConversationContextInOneModelCall() throws Exception {
         String manager = login("hana");
         String docId = uploadIndexed(manager, "handbook.md", HANDBOOK);
         String token = login("ivan");
 
         String first = ask(token, "How many vacation days do I get in my first year?", null);
         String conversationId = JsonPath.read(first, "$.conversationId");
-        assertThat((Object) JsonPath.read(first, "$.searchQuery")).isNull();
-        assertThat(chatModel.rewritePrompts).isEmpty();  // nothing to rewrite on the first question
+        assertThat(chatModel.prompts).singleElement().asString().doesNotContain("Earlier in this conversation");
 
-        chatModel.rewriteTo = "\"How many vacation days do I get from the third year of service?\"";
-        String second = ask(token, "And from the third year?", conversationId);
+        // "Allowance" appears only in the handbook; "that" and "later" need the earlier question.
+        String second = ask(token, "Does that allowance change later?", conversationId);
 
         assertThat((String) JsonPath.read(second, "$.conversationId")).isEqualTo(conversationId);
-        assertThat((String) JsonPath.read(second, "$.searchQuery"))
-                .isEqualTo("How many vacation days do I get from the third year of service?");
-        assertThat(chatModel.rewritePrompts).singleElement().asString()
+        assertThat((Boolean) JsonPath.read(second, "$.grounded")).isTrue();
+        // One model call per question: no separate rewrite step.
+        assertThat(chatModel.prompts).hasSize(2);
+        assertThat(chatModel.prompts.getLast())
+                .contains("Earlier in this conversation:")
                 .contains("Employee: How many vacation days do I get in my first year?")
-                .contains("Assistant: Here is what the policy says")
-                .contains("Follow-up question: And from the third year?");
-        assertThat(chatModel.answerPrompts.getLast())
-                .contains("Question: How many vacation days do I get from the third year of service?");
+                .contains("Assistant: Here is what the policy says .")  // old [1] markers removed
+                .contains("15 paid vacation days")
+                .contains("Question: Does that allowance change later?");
 
         mvc.perform(as(token, get("/api/conversations/" + conversationId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("How many vacation days do I get in my first year?"))
                 .andExpect(jsonPath("$.messages.length()").value(4))
-                .andExpect(jsonPath("$.messages[2].content").value("And from the third year?"))
-                .andExpect(jsonPath("$.messages[2].searchQuery")
-                        .value("How many vacation days do I get from the third year of service?"))
+                .andExpect(jsonPath("$.messages[2].content").value("Does that allowance change later?"))
                 .andExpect(jsonPath("$.messages[3].sender").value("ASSISTANT"))
                 .andExpect(jsonPath("$.messages[3].citations[0].section").value("Vacation"));
 
@@ -65,6 +63,24 @@ class ConversationIntegrationTest extends IntegrationTestBase {
                 .andReturn().getResponse().getContentAsString();
         List<String> ids = JsonPath.read(list, "$[*].id");
         assertThat(ids.getFirst()).isEqualTo(conversationId);  // most recently updated first
+
+        mvc.perform(as(manager, delete("/api/documents/" + docId))).andExpect(status().isNoContent());
+    }
+
+    @Test
+    void followUpThatOnlyMakesSenseWithContextStillFindsTheSource() throws Exception {
+        String manager = login("hana");
+        String docId = uploadIndexed(manager, "handbook.md", HANDBOOK);
+        String token = login("ivan");
+
+        String first = ask(token, "How many vacation days do I get in my first year?", null);
+        String conversationId = JsonPath.read(first, "$.conversationId");
+
+        // On its own this matches nothing; searched together with the previous question it does.
+        String alone = ask(token, "What about seniors?", null);
+        assertThat((Boolean) JsonPath.read(alone, "$.grounded")).isFalse();
+        String followUp = ask(token, "What about seniors?", conversationId);
+        assertThat((Boolean) JsonPath.read(followUp, "$.grounded")).isTrue();
 
         mvc.perform(as(manager, delete("/api/documents/" + docId))).andExpect(status().isNoContent());
     }
