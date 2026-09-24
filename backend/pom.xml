@@ -11,11 +11,11 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.companybrain</groupId>
-    <artifactId>companybrain-backend</artifactId>
+    <groupId>com.claimpilot</groupId>
+    <artifactId>claimpilot-backend</artifactId>
     <version>0.1.0</version>
-    <name>CompanyBrain</name>
-    <description>AI knowledge assistant for internal company documents</description>
+    <name>ClaimPilot</name>
+    <description>Ask your insurance policy, get claim steps, and pre-fill claim forms with traceable sources</description>
 
     <properties>
         <java.version>21</java.version>

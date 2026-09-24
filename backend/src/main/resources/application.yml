@@ -1,22 +1,25 @@
 spring:
   application:
-    name: companybrain
+    name: claimpilot
   threads:
     virtual:
       enabled: true          # @Async indexing jobs run on virtual threads
   datasource:
-    url: jdbc:postgresql://localhost:5432/companybrain
-    username: companybrain
-    password: companybrain
+    url: jdbc:postgresql://localhost:5432/claimpilot
+    username: claimpilot
+    password: claimpilot
   jpa:
     open-in-view: false
     hibernate:
       ddl-auto: none         # schema is owned by Flyway
   mongodb:
-    uri: mongodb://localhost:27017/companybrain
+    uri: mongodb://localhost:27017/claimpilot
+    representation:
+      uuid: standard         # store java.util.UUID as the standard BSON binary subtype
   data:
     mongodb:
       auto-index-creation: true
+      uuid-representation: standard
   servlet:
     multipart:
       max-file-size: 20MB
@@ -37,7 +40,7 @@ spring:
         index-type: HNSW
         distance-type: COSINE_DISTANCE
 
-companybrain:
+claimpilot:
   storage:
     local-root: ./data/uploads
   indexing:
@@ -47,9 +50,12 @@ companybrain:
     similarity-threshold: 0.40
   conversation:
     history-turns: 3         # earlier question/answer pairs sent as context with a follow-up
+  ocr:
+    command: tesseract       # macOS: brew install tesseract (and tesseract-lang for French)
+    languages: eng
   security:
-    # Development default only. Set COMPANYBRAIN_SECURITY_JWT_SECRET (32+ characters) anywhere else.
-    jwt-secret: ${COMPANYBRAIN_SECURITY_JWT_SECRET:dev-only-secret-change-me-0123456789abcdef}
+    # Development default only. Set CLAIMPILOT_SECURITY_JWT_SECRET (32+ characters) anywhere else.
+    jwt-secret: ${CLAIMPILOT_SECURITY_JWT_SECRET:dev-only-secret-change-me-0123456789abcdef}
     token-ttl: 8h
 
 management:

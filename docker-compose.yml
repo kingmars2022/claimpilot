@@ -2,17 +2,17 @@
 services:
   postgres:
     image: pgvector/pgvector:pg17
-    container_name: companybrain-postgres
+    container_name: claimpilot-postgres
     environment:
-      POSTGRES_DB: companybrain
-      POSTGRES_USER: companybrain
-      POSTGRES_PASSWORD: companybrain
+      POSTGRES_DB: claimpilot
+      POSTGRES_USER: claimpilot
+      POSTGRES_PASSWORD: claimpilot
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U companybrain -d companybrain"]
+      test: ["CMD-SHELL", "pg_isready -U claimpilot -d claimpilot"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -20,7 +20,7 @@ services:
   # Conversation history (phase 2)
   mongo:
     image: mongo:7.0
-    container_name: companybrain-mongo
+    container_name: claimpilot-mongo
     ports:
       - "27017:27017"
     volumes:
