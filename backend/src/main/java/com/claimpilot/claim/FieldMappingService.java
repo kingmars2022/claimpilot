@@ -20,7 +20,7 @@ import com.claimpilot.extraction.JsonReply;
  * Works out which data item each form field holds. PDF field names are often meaningless
  * ("txtField_07"), so the model reads each field's label once and maps it to a {@link DataKey}.
  * The mapping is stored per form version and reused, so later claims on the same form need no
- * model call at all.
+ * model call at all. Forms shipped with the app carry a reviewed mapping and never need the model.
  */
 @Service
 public class FieldMappingService {
@@ -57,6 +57,10 @@ public class FieldMappingService {
     }
 
     private Map<String, DataKey> load(FormTemplate template) {
+        if (template.presetMapping().isPresent()) {
+            // A built-in form ships with a reviewed mapping; it goes through the same checks as the model's.
+            return parse(template.presetMapping().get(), template);
+        }
         List<FormFieldMapping> stored = repository.findByTemplateSha256(template.sha256());
         if (!stored.isEmpty()) {
             Map<String, DataKey> cached = new LinkedHashMap<>();

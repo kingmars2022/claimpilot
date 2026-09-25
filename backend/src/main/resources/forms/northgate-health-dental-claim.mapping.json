@@ -1,0 +1,23 @@
+{
+  "member_name": "MEMBER_NAME",
+  "member_group": "POLICY_NUMBER",
+  "member_id": "CERTIFICATE_NUMBER",
+  "member_employer": "PLAN_SPONSOR",
+  "member_phone": "NONE",
+  "patient_name": "PATIENT_NAME",
+  "patient_dob": "PATIENT_DOB",
+  "patient_relation": "PATIENT_RELATIONSHIP",
+  "cob_insurer": "OTHER_INSURER",
+  "cob_group": "OTHER_POLICY_NUMBER",
+  "cob_id": "OTHER_CERTIFICATE_NUMBER",
+  "exp_provider": "PROVIDER_NAME",
+  "exp_date": "SERVICE_DATE",
+  "exp_type": "SERVICE_TYPE",
+  "exp_code": "NONE",
+  "exp_receipt": "RECEIPT_NUMBER",
+  "exp_charged": "AMOUNT_CHARGED",
+  "exp_otherpaid": "AMOUNT_PAID_BY_OTHER_PLAN",
+  "decl_agree": "DECLARATION",
+  "decl_signature": "SIGNATURE",
+  "decl_date": "SIGNATURE_DATE"
+}

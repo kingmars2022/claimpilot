@@ -108,7 +108,7 @@ class ClaimIntegrationTest extends IntegrationTestBase {
             assertThat(form.getField("txtField_09").getValueAsString()).isEqualTo("Harbourline Vie");
             assertThat(form.getField("txtField_14").getValueAsString()).isEqualTo("Physiotherapy");
             assertThat(form.getField("txtField_17").getValueAsString()).isEqualTo("36.00");
-            // The model mapped the signature to the member's name; it must still be blank.
+            // Signature, date signed, bank details and the declaration are left for the member.
             assertThat(form.getField("sigField_01").getValueAsString()).isEmpty();
             assertThat(form.getField("txtField_18").getValueAsString()).isEmpty();
             assertThat(form.getField("txtField_19").getValueAsString()).isEmpty();
@@ -117,13 +117,12 @@ class ClaimIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    void fieldMappingIsWorkedOutOnceAndReused() throws Exception {
-        createDraft();
+    void aBuiltInFormNeedsNoModelCallToMapItsFields() throws Exception {
         int mappingCalls = chatModel.calls(Kind.MAP_FORM).size();
-        assertThat(mappingCalls).isLessThanOrEqualTo(1);
 
         createDraft();
         createDraft();
+
         assertThat(chatModel.calls(Kind.MAP_FORM)).hasSize(mappingCalls);
     }
 
@@ -175,6 +174,26 @@ class ClaimIntegrationTest extends IntegrationTestBase {
                 .andExpect(status().isNotFound());
         String samPolicies = mvc.perform(as(sam, get("/api/policies"))).andReturn().getResponse().getContentAsString();
         assertThat((List<String>) JsonPath.read(samPolicies, "$[*].id")).doesNotContain(spousePolicy, ownPolicy);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void aClaimIsFilledOnAnotherInsurersBuiltInForm() throws Exception {
+        String draft = mvc.perform(as(token, post("/api/claims").contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("claimType", "SECONDARY_PARAMEDICAL", "policyId", spousePolicy,
+                                "otherPolicyId", ownPolicy, "receiptId", receipt, "relationship", "SPOUSE",
+                                "formKey", "builtin:northgate-health-dental")))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat((String) JsonPath.read(draft, "$.form.name")).startsWith("Northgate Life");
+        assertThat(field(draft, "MEMBER_NAME")).containsEntry("value", "Marc Gagnon");
+        assertThat(field(draft, "RECEIPT_NUMBER")).containsEntry("value", "R-2026-0318");
+        List<String> keys = JsonPath.read(draft, "$.fields[*].key");
+        assertThat(keys).doesNotContain("AMOUNT_CLAIMED");
+        assertThat((List<String>) JsonPath.read(draft, "$.leftForYou")).contains(
+                "Dental procedure code and tooth number (dental claims only)", "Daytime telephone",
+                "Plan member signature");
     }
 
     private String createDraft() throws Exception {

@@ -1,0 +1,20 @@
+{
+  "Text1": "MEMBER_NAME",
+  "Text2": "POLICY_NUMBER",
+  "Text3": "CERTIFICATE_NUMBER",
+  "Text4": "NONE",
+  "Text5": "PATIENT_NAME",
+  "Text6": "PATIENT_DOB",
+  "Text7": "PATIENT_RELATIONSHIP",
+  "Text8": "OTHER_INSURER",
+  "Text9": "OTHER_POLICY_NUMBER",
+  "Text10": "PROVIDER_NAME",
+  "Text11": "SERVICE_DATE",
+  "Text12": "NONE",
+  "Text13": "NONE",
+  "Text14": "AMOUNT_CHARGED",
+  "Text15": "AMOUNT_PAID_BY_OTHER_PLAN",
+  "Check1": "DECLARATION",
+  "Text16": "SIGNATURE",
+  "Text17": "SIGNATURE_DATE"
+}

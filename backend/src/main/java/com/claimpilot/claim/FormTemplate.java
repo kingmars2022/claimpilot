@@ -31,6 +31,8 @@ public final class FormTemplate {
     private final byte[] bytes;
     private final String sha256;
     private final List<Field> fields;
+    /** For a form shipped with the app: its reviewed field mapping (JSON), so no model call is needed. */
+    private final String presetMapping;
 
     /**
      * @param label the field's tooltip, which is what a person reading the form sees next to it
@@ -38,23 +40,34 @@ public final class FormTemplate {
     public record Field(String name, String label, boolean checkbox) {
     }
 
-    private FormTemplate(String name, byte[] bytes) {
+    private FormTemplate(String name, byte[] bytes, String presetMapping) {
         this.name = name;
         this.bytes = bytes;
         this.sha256 = sha256(bytes);
         this.fields = readFields(bytes);
+        this.presetMapping = presetMapping;
     }
 
-    public static FormTemplate classpath(String path) {
-        try (InputStream in = new ClassPathResource(path).getInputStream()) {
-            return new FormTemplate(path, in.readAllBytes());
-        } catch (IOException ex) {
-            throw new UncheckedIOException("Form template " + path + " is missing", ex);
-        }
+    /**
+     * A form shipped with the app, with its reviewed mapping next to it
+     * ({@code forms/x.pdf} and {@code forms/x.mapping.json}).
+     */
+    public static FormTemplate builtIn(String path) {
+        String mapping = new String(read(path.replaceFirst("\\.pdf$", ".mapping.json")),
+                java.nio.charset.StandardCharsets.UTF_8);
+        return new FormTemplate(path, read(path), mapping);
     }
 
     public static FormTemplate of(String name, byte[] bytes) {
-        return new FormTemplate(name, bytes);
+        return new FormTemplate(name, bytes, null);
+    }
+
+    private static byte[] read(String path) {
+        try (InputStream in = new ClassPathResource(path).getInputStream()) {
+            return in.readAllBytes();
+        } catch (IOException ex) {
+            throw new UncheckedIOException("Form resource " + path + " is missing", ex);
+        }
     }
 
     public String name() {
@@ -71,6 +84,11 @@ public final class FormTemplate {
 
     public List<Field> fields() {
         return fields;
+    }
+
+    /** The reviewed mapping of a built-in form as JSON, or empty for a form the user uploaded. */
+    public java.util.Optional<String> presetMapping() {
+        return java.util.Optional.ofNullable(presetMapping);
     }
 
     private static List<Field> readFields(byte[] bytes) {

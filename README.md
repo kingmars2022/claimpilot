@@ -45,9 +45,20 @@ what the plan pays, and whether approval or a referral is needed first. Every it
 clause it came from; items the model cannot tie to a clause are dropped.
 
 ### 3. Pre-filled claim form
-Fill a built-in form (a fictional English form from Cedarview, a French one from Harbourline) or
-**upload your insurer's own fillable PDF**: its fields are read and matched by their labels, whatever
-the language or field names. For a second-plan ("supplementary") health claim:
+Fill one of five built-in forms, or **upload your insurer's own fillable PDF**: its fields are read and
+matched by their labels, whatever the language or field names. The built-in forms ship with a reviewed
+field mapping, so they need no model call at all:
+
+| Built-in form | Language | Left for you |
+|---|---|---|
+| Cedarview Assurance: Supplementary Health Claim | English | bank details |
+| Harbourline Vie: Demande de remboursement | French | |
+| Northgate Life: Health and Dental Claim | English | dental procedure code and tooth, phone |
+| Prairie Shield Insurance: Prescription Drug Claim | English | Rx number, DIN, mailing address |
+| Assurance Boréale: Réclamation soins de la vue | French | eye prescription |
+
+All five insurers are fictional: real insurers' forms are copyrighted, so the public repository does not
+ship them. Upload yours instead; signature, declaration and date signed are left blank on every form. For a second-plan ("supplementary") health claim:
 
 | Form section | Filled from |
 |---|---|
@@ -67,9 +78,18 @@ checked, and it stays editable. Claim types: paramedical care, dental, prescript
 With two plans in the family, ClaimPilot decides the order itself, in code, following the Canadian
 (CLHIA) coordination of benefits guidelines: the patient's own plan pays first and the plan where they
 are a dependent pays second; for a child, the plan of the parent whose birthday comes first in the year.
+For a child of **separated or divorced parents**, custody decides instead (set in the profile):
+
+| Custody | Order the plans pay in |
+|---|---|
+| You have custody | Your plan, then your spouse's (the step-parent), then the other parent's |
+| The other parent has custody | The other parent's plan (then their spouse's), then yours, then your spouse's |
+| Joint custody | Birthday rule between the two parents, then step-parents |
+
 On the claim page, *Who is the claim for?* fills in the plan that paid first, the plan to claim the
 balance on and the relationship, with the rule that decided it. Cases the rules do not settle (two plans
-of one person, separated parents, missing birthdays) are shown as such, never guessed.
+of one person, missing birthdays, only one plan) are shown as such, never guessed, and the explanation
+reminds that a court order on health expenses overrides the rules.
 
 ### 4. Assistant
 Describe the situation once, in any language: *"My physio cost $120 and my plan paid $84, can I claim
@@ -120,7 +140,10 @@ These screenshots come from a local run with the fictional sample documents: Fio
 <img src="docs/screenshots/ask.png" alt="Ask: an answer citing the policy, and a call kit for a question the policy does not answer" width="560">
 
 1. The question is embedded (bge-m3) and searched in pgvector, **filtered to this user and this
-   policy**. Because bge-m3 is multilingual, an English question finds the French clause.
+   policy**. Because bge-m3 is multilingual, an English question finds the French clause. A keyword
+   search (Postgres word stems ranked with BM25) runs next to it and finds exact terms such as
+   "crown"; the two lists are merged by rank, and a "is X covered?" question always sees the
+   policy's exclusions.
 2. The best clauses go to the model with their page numbers, and it must reply with a status:
    answered, unclear or not in the policy.
 3. *How much does my plan pay for physiotherapy?* is answered in English from the French text and
@@ -171,7 +194,8 @@ Shown at the top of this page. When the claim is started:
   marked unverified instead of being trusted.
 - **The model maps, the code fills.** PDF field names are often meaningless (`txtField_07`). The model
   reads each field's label once and maps it to a known data item; the mapping is stored per form
-  version (SHA-256) and reused, so later claims need no model call. Apache PDFBox writes the values,
+  version (SHA-256) and reused, so later claims need no model call. Built-in forms ship with a
+  reviewed mapping that goes through the same checks, and a test proves it matches the PDF field for field. Apache PDFBox writes the values,
   which is deterministic and unit-tested.
 - **Hard rules in code, not in the prompt.** Signature, declaration and consent fields are forced to
   stay blank even if the model maps them to a value (a test checks exactly that). An "answered"
@@ -334,13 +358,14 @@ cd backend
 - **Unit tests**: date and amount parsing (English and French), quote verification, extraction
   parsing, language detection, answer status parsing, call script, guide parsing, field mapping
   rules, value assembly, PDF filling, file encryption, the assistant's plan rules, cache and rate
-  limits (in memory and in a real Redis).
+  limits (in memory and in a real Redis), coordination of benefits including custody, keyword ranking
+  and rank fusion, and every built-in form's mapping against its PDF.
 - **Integration tests** run the whole application over HTTP against real PostgreSQL/pgvector and
   MongoDB in Docker (Testcontainers), with deterministic fake models:
   - `PolicyIntegrationTest`: verified facts, cited answers, unclear and not-in-policy answers,
     French question with an English call script, follow-ups.
   - `ClaimIntegrationTest`: guide with cited items and caching, the complete pre-fill → review →
-    download flow, mapping cache, and isolation between users.
+    download flow, another insurer's built-in form, coordination of benefits, and isolation between users.
   - `ScannedDocumentIntegrationTest`: OCR of a scanned PDF and a receipt photo (skipped without Tesseract).
   - `AccountIntegrationTest`: sign-in, sign-up, profile, account deletion across both databases, the
     notification stream's token rule, and the activity log.
@@ -415,4 +440,5 @@ errors; keyword search alongside the vector search is the next improvement.
 - [x] **Next**: evaluation on a booklet laid out like real ones and on the member's own private
   policies; S3 events through SQS (the AWS design, ElasticMQ locally); coordination-of-benefits rules
   that decide which plan pays first.
-- [ ] **Later**: separated-parents (custody) rules; more insurers' claim forms out of the box.
+- [x] **Later**: separated-parents (custody) rules; five insurers' claim forms out of the box (health and
+  dental, prescription drugs, vision) with reviewed mappings; keyword search alongside vector search.

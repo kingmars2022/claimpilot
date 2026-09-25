@@ -43,6 +43,29 @@ public class FormCatalog {
     private record BuiltIn(String name, FormTemplate template) {
     }
 
+    /** A form shipped with the app: the PDF and its reviewed mapping live under {@code forms/}. */
+    record BuiltInForm(String name, String path) {
+    }
+
+    /** The insurers' forms available out of the box, all fictional. */
+    static final Map<String, BuiltInForm> BUILT_IN_FORMS = builtInForms();
+
+    private static Map<String, BuiltInForm> builtInForms() {
+        Map<String, BuiltInForm> forms = new LinkedHashMap<>();
+        forms.put(DEFAULT_KEY, new BuiltInForm("Cedarview Assurance: Supplementary Health Claim (English)",
+                FormTemplate.SECONDARY_CLAIM_FORM));
+        forms.put("builtin:harbourline-demande", new BuiltInForm(
+                "Harbourline Vie: Demande de remboursement (French)", FormTemplate.FRENCH_CLAIM_FORM));
+        forms.put("builtin:northgate-health-dental", new BuiltInForm(
+                "Northgate Life: Health and Dental Claim (English)", "forms/northgate-health-dental-claim.pdf"));
+        forms.put("builtin:prairie-shield-drug", new BuiltInForm(
+                "Prairie Shield Insurance: Prescription Drug Claim (English)", "forms/prairie-shield-drug-claim.pdf"));
+        forms.put("builtin:boreale-vision", new BuiltInForm(
+                "Assurance Boréale: Réclamation soins de la vue (French)",
+                "forms/boreale-reclamation-soins-de-la-vue.pdf"));
+        return java.util.Collections.unmodifiableMap(forms);
+    }
+
     private final Map<String, BuiltIn> builtIns = new LinkedHashMap<>();
     private final DocumentRepository documents;
     private final FileStorage storage;
@@ -52,11 +75,8 @@ public class FormCatalog {
     public FormCatalog(DocumentRepository documents, FileStorage storage) {
         this.documents = documents;
         this.storage = storage;
-        builtIns.put(DEFAULT_KEY, new BuiltIn("Cedarview Assurance: Supplementary Health Claim (English)",
-                FormTemplate.classpath(FormTemplate.SECONDARY_CLAIM_FORM)));
-        builtIns.put("builtin:harbourline-demande", new BuiltIn(
-                "Harbourline Vie: Demande de remboursement (French)",
-                FormTemplate.classpath(FormTemplate.FRENCH_CLAIM_FORM)));
+        BUILT_IN_FORMS.forEach((key, form) -> builtIns.put(key,
+                new BuiltIn(form.name(), FormTemplate.builtIn(form.path()))));
     }
 
     public List<FormOption> list(AppUser user) {

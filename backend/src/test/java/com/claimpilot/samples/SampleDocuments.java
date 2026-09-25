@@ -50,6 +50,9 @@ public final class SampleDocuments {
     public static final String RECEIPT_PNG = "physio-receipt-2026-03-05.png";
     public static final String CLAIM_FORM = "cedarview-secondary-claim-form.pdf";
     public static final String FRENCH_CLAIM_FORM = "harbourline-demande-de-remboursement.pdf";
+    public static final String NORTHGATE_FORM = "northgate-health-dental-claim.pdf";
+    public static final String DRUG_FORM = "prairie-shield-drug-claim.pdf";
+    public static final String VISION_FORM = "boreale-reclamation-soins-de-la-vue.pdf";
     public static final String BOOKLET_POLICY = "northgate-benefits-booklet-daniel-okafor.pdf";
     public static final String SPOUSE_POLICY_SCANNED = "cedarview-policy-marc-gagnon-scanned.pdf";
     public static final String RECEIPT_SCANNED = "physio-receipt-2026-03-05-scanned.pdf";
@@ -79,6 +82,9 @@ public final class SampleDocuments {
         Files.write(samples.resolve(CLAIM_FORM), claimForm());
         Files.write(forms.resolve(FRENCH_CLAIM_FORM), frenchClaimForm());
         Files.write(samples.resolve(FRENCH_CLAIM_FORM), frenchClaimForm());
+        Files.write(forms.resolve(NORTHGATE_FORM), northgateClaimForm());
+        Files.write(forms.resolve(DRUG_FORM), drugClaimForm());
+        Files.write(forms.resolve(VISION_FORM), visionClaimForm());
         System.out.println("Sample documents written to " + samples.toAbsolutePath().normalize());
     }
 
@@ -375,6 +381,110 @@ public final class SampleDocuments {
                         checkbox("f18", "J'atteste que les renseignements fournis sont exacts"),
                         field("f19", "Signature de l'adh\u00e9rent"),
                         field("f20", "Date de la signature (AAAA-MM-JJ)")));
+    }
+
+    /**
+     * Northgate Life's health and dental claim (the insurer of the booklet policy). Its field names
+     * follow a different style (member_name) and it asks for dental codes the app cannot know.
+     */
+    public static byte[] northgateClaimForm() {
+        return fillableForm(List.of(
+                "NORTHGATE LIFE",
+                "Health and Dental Claim",
+                "Fictional form created for a software demonstration. Northgate Life is not a real company."),
+                List.of(
+                        section("1. Plan member"),
+                        field("member_name", "Plan member name (first and last)"),
+                        field("member_group", "Group plan number"),
+                        field("member_id", "Member ID / certificate number"),
+                        field("member_employer", "Employer"),
+                        field("member_phone", "Daytime telephone"),
+                        section("2. Patient"),
+                        field("patient_name", "Patient name"),
+                        field("patient_dob", "Patient birth date (YYYY-MM-DD)"),
+                        field("patient_relation", "Relationship to plan member (self, spouse, child)"),
+                        section("3. Other coverage"),
+                        field("cob_insurer", "If the patient has other coverage, name of the other insurer"),
+                        field("cob_group", "Other group plan number"),
+                        field("cob_id", "Other plan member ID"),
+                        section("4. Expense"),
+                        field("exp_provider", "Provider name"),
+                        field("exp_date", "Date of service (YYYY-MM-DD)"),
+                        field("exp_type", "Type of service or item"),
+                        field("exp_code", "Dental procedure code and tooth number (dental claims only)"),
+                        field("exp_receipt", "Receipt or invoice number"),
+                        field("exp_charged", "Amount charged ($)"),
+                        field("exp_otherpaid", "Amount paid by the other plan ($)"),
+                        section("5. Declaration"),
+                        checkbox("decl_agree", "I certify that the information given is true and complete"),
+                        field("decl_signature", "Plan member signature"),
+                        field("decl_date", "Date (YYYY-MM-DD)")));
+    }
+
+    /** A prescription drug claim from the fictional Prairie Shield Insurance. */
+    public static byte[] drugClaimForm() {
+        return fillableForm(List.of(
+                "PRAIRIE SHIELD INSURANCE",
+                "Prescription Drug Claim",
+                "Fictional form created for a software demonstration. Prairie Shield Insurance is not a real company."),
+                List.of(
+                        section("Section A - Plan member"),
+                        field("Text1", "Plan member's name"),
+                        field("Text2", "Plan number"),
+                        field("Text3", "ID number"),
+                        field("Text4", "Mailing address"),
+                        section("Section B - Patient"),
+                        field("Text5", "Patient's name"),
+                        field("Text6", "Patient's date of birth (YYYY-MM-DD)"),
+                        field("Text7", "Relationship to plan member"),
+                        section("Section C - Coordination of benefits"),
+                        field("Text8", "Other insurance carrier"),
+                        field("Text9", "Other carrier's policy number"),
+                        section("Section D - Prescription"),
+                        field("Text10", "Pharmacy name"),
+                        field("Text11", "Date dispensed (YYYY-MM-DD)"),
+                        field("Text12", "Prescription (Rx) number"),
+                        field("Text13", "Drug Identification Number (DIN)"),
+                        field("Text14", "Total cost ($)"),
+                        field("Text15", "Amount paid by the other carrier ($)"),
+                        section("Section E - Authorization"),
+                        checkbox("Check1", "I authorize the release of information needed to process this claim"),
+                        field("Text16", "Signature of plan member"),
+                        field("Text17", "Date signed (YYYY-MM-DD)")));
+    }
+
+    /** A vision care claim, in French, from the fictional Assurance Boreale. */
+    public static byte[] visionClaimForm() {
+        return fillableForm(List.of(
+                "ASSURANCE BOREALE",
+                "Reclamation - soins de la vue",
+                "Formulaire fictif cree pour une demonstration logicielle. Assurance Boreale n'existe pas."),
+                List.of(
+                        section("Partie 1 - Adherent"),
+                        field("champ1", "Nom de l'adh\u00e9rent"),
+                        field("champ2", "Num\u00e9ro de contrat"),
+                        field("champ3", "Num\u00e9ro d'identification de l'adh\u00e9rent"),
+                        field("champ4", "Nom de l'employeur"),
+                        section("Partie 2 - Personne qui a recu les soins"),
+                        field("champ5", "Nom de la personne"),
+                        field("champ6", "Date de naissance (AAAA-MM-JJ)"),
+                        field("champ7", "Lien avec l'adh\u00e9rent"),
+                        field("champ8", "Adresse"),
+                        section("Partie 3 - Autre assurance"),
+                        field("champ9", "Nom de l'autre assureur"),
+                        field("champ10", "Num\u00e9ro de contrat de l'autre assurance"),
+                        section("Partie 4 - Frais"),
+                        field("champ11", "Nom de l'optom\u00e9triste ou de l'opticien"),
+                        field("champ12", "Date de l'achat ou de l'examen (AAAA-MM-JJ)"),
+                        field("champ13", "Type (lunettes, lentilles, examen de la vue)"),
+                        field("champ14", "Prescription : oeil droit / oeil gauche"),
+                        field("champ15", "Montant total ($)"),
+                        field("champ16", "Montant pay\u00e9 par l'autre assurance ($)"),
+                        field("champ17", "Montant r\u00e9clam\u00e9 ($)"),
+                        section("Partie 5 - Signature"),
+                        checkbox("champ18", "Je certifie que ces renseignements sont exacts"),
+                        field("champ19", "Signature de l'adh\u00e9rent"),
+                        field("champ20", "Date (AAAA-MM-JJ)")));
     }
 
     /** One line of a generated form: a section title, a text field or a checkbox. */

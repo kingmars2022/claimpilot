@@ -1,0 +1,22 @@
+{
+  "champ1": "MEMBER_NAME",
+  "champ2": "POLICY_NUMBER",
+  "champ3": "CERTIFICATE_NUMBER",
+  "champ4": "PLAN_SPONSOR",
+  "champ5": "PATIENT_NAME",
+  "champ6": "PATIENT_DOB",
+  "champ7": "PATIENT_RELATIONSHIP",
+  "champ8": "PATIENT_ADDRESS",
+  "champ9": "OTHER_INSURER",
+  "champ10": "OTHER_POLICY_NUMBER",
+  "champ11": "PROVIDER_NAME",
+  "champ12": "SERVICE_DATE",
+  "champ13": "SERVICE_TYPE",
+  "champ14": "NONE",
+  "champ15": "AMOUNT_CHARGED",
+  "champ16": "AMOUNT_PAID_BY_OTHER_PLAN",
+  "champ17": "AMOUNT_CLAIMED",
+  "champ18": "DECLARATION",
+  "champ19": "SIGNATURE",
+  "champ20": "SIGNATURE_DATE"
+}

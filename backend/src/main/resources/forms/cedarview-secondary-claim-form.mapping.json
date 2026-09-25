@@ -1,0 +1,23 @@
+{
+  "txtField_01": "MEMBER_NAME",
+  "txtField_02": "POLICY_NUMBER",
+  "txtField_03": "CERTIFICATE_NUMBER",
+  "txtField_04": "PLAN_SPONSOR",
+  "txtField_05": "PATIENT_NAME",
+  "txtField_06": "PATIENT_DOB",
+  "txtField_07": "PATIENT_RELATIONSHIP",
+  "txtField_08": "PATIENT_ADDRESS",
+  "txtField_09": "OTHER_INSURER",
+  "txtField_10": "OTHER_POLICY_NUMBER",
+  "txtField_11": "OTHER_CERTIFICATE_NUMBER",
+  "txtField_12": "PROVIDER_NAME",
+  "txtField_13": "SERVICE_DATE",
+  "txtField_14": "SERVICE_TYPE",
+  "txtField_15": "AMOUNT_CHARGED",
+  "txtField_16": "AMOUNT_PAID_BY_OTHER_PLAN",
+  "txtField_17": "AMOUNT_CLAIMED",
+  "txtField_19": "NONE",
+  "chkField_01": "DECLARATION",
+  "sigField_01": "SIGNATURE",
+  "txtField_18": "SIGNATURE_DATE"
+}
