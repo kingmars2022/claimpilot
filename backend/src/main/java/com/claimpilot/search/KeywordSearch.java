@@ -31,7 +31,8 @@ import com.claimpilot.document.ProcessingService;
  * BM25; words found in almost every question about a policy ("claim", "plan") are left out. A chunk must
  * hold at least half of the question's words: one shared word ("included") is not a match.
  * <p>
- * The stemmed words are stored with each chunk in a generated column with a GIN index, and chunks
+ * The stemmed words (English and French rules) are stored with each chunk in a generated column with a
+ * GIN index; a question is stemmed with the rules of its own language, and chunks
  * are looked up by policy through an index, so a question reads only the chunks that share a word
  * with it, however long the policy.
  */
@@ -54,9 +55,14 @@ public class KeywordSearch {
      * meant, and a claims page that repeats them would outrank the clause with the rare word.
      */
     static final Set<String> DOMAIN_WORDS = Set.of("claim", "plan", "polici", "insur", "insuranc", "benefit",
-            "member", "cover", "coverag", "pay", "paid", "get", "need", "much");
+            "member", "cover", "coverag", "pay", "paid", "get", "need", "much",
+            "couvert", "rembours", "réclam", "régim", "assur", "polic", "prestat", "adhérent", "soin", "quel",
+            "est-ce", "mont", "combien");
     private static final Pattern COVERAGE_QUESTION = Pattern.compile(
             "(?i)\\bcover|\\breimburs|\\bpay for\\b|\\beligible\\b|\\bclaim for\\b|rembours|couvert|保不保|报销|赔");
+
+    private static final Pattern FRENCH = Pattern.compile(
+            "(?i)[éèêàâçîôûù]|\\b(?:est-ce|quel|quelle|combien|pour|les|des|une|mon|ma|mes|remboursé|couvert)\\b");
 
     private static final String OWNER = "metadata->>'" + OwnerScope.META_OWNER_ID + "'";
     private static final String DOCUMENT = "metadata->>'" + ProcessingService.META_DOCUMENT_ID + "'";
@@ -74,9 +80,12 @@ public class KeywordSearch {
     /** Adds the stemmed-words column and the indexes once; later starts find them in place. */
     static boolean prepare(JdbcTemplate jdbc) {
         try {
-            jdbc.execute("ALTER TABLE vector_store ADD COLUMN IF NOT EXISTS words tsvector "
-                    + "GENERATED ALWAYS AS (to_tsvector('english', coalesce(content, ''))) STORED");
-            jdbc.execute("CREATE INDEX IF NOT EXISTS vector_store_words_idx ON vector_store USING GIN (words)");
+            // English and French stems of every chunk: Quebec policies are often in French.
+            jdbc.execute("ALTER TABLE vector_store DROP COLUMN IF EXISTS words");
+            jdbc.execute("ALTER TABLE vector_store ADD COLUMN IF NOT EXISTS stems tsvector GENERATED ALWAYS AS "
+                    + "(to_tsvector('english', coalesce(content, '')) || to_tsvector('french', coalesce(content, ''))) "
+                    + "STORED");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS vector_store_stems_idx ON vector_store USING GIN (stems)");
             jdbc.execute("CREATE INDEX IF NOT EXISTS vector_store_document_idx ON vector_store ((" + DOCUMENT + "))");
             return true;
         } catch (RuntimeException ex) {
@@ -87,17 +96,18 @@ public class KeywordSearch {
 
     /** The best matching chunks for the question, best first. Empty when no word matches. */
     public List<Document> search(String question, Long ownerId, UUID policyId, int limit) {
-        if (!available) {
+        String config = config(question);
+        if (!available || config == null) {
             return List.of();
         }
         Set<String> terms = new java.util.HashSet<>(lexemes(jdbc.queryForObject(
-                "SELECT to_tsvector('english', ?)::text", String.class, question)).keySet());
+                "SELECT to_tsvector(?::regconfig, ?)::text", String.class, config, question)).keySet());
         terms.removeAll(DOMAIN_WORDS);
         if (terms.isEmpty()) {
             return List.of();
         }
         Map<String, Object> size = jdbc.queryForMap(
-                "SELECT count(*) AS n, coalesce(avg(length(words)), 1) AS average FROM vector_store "
+                "SELECT count(*) AS n, coalesce(avg(length(stems)), 1) AS average FROM vector_store "
                         + "WHERE " + DOCUMENT + " = ? AND " + OWNER + " = ?",
                 policyId.toString(), ownerId.toString());
         int n = ((Number) size.get("n")).intValue();
@@ -105,8 +115,8 @@ public class KeywordSearch {
         // Only the chunks sharing a word with the question; the text-to-tsquery cast keeps the
         // stems exactly as they are.
         List<Chunk> candidates = jdbc.query(
-                "SELECT id::text, content, metadata::text, words::text FROM vector_store "
-                        + "WHERE " + DOCUMENT + " = ? AND " + OWNER + " = ? AND words @@ ?::tsquery",
+                "SELECT id::text, content, metadata::text, stems::text FROM vector_store "
+                        + "WHERE " + DOCUMENT + " = ? AND " + OWNER + " = ? AND stems @@ ?::tsquery",
                 CHUNK, policyId.toString(), ownerId.toString(), anyOf(terms));
         return rank(terms, candidates, limit, n, averageLength);
     }
@@ -121,11 +131,22 @@ public class KeywordSearch {
             return List.of();
         }
         return jdbc.query(
-                "SELECT id::text, content, metadata::text, words::text FROM vector_store "
+                "SELECT id::text, content, metadata::text, stems::text FROM vector_store "
                         + "WHERE " + DOCUMENT + " = ? AND " + OWNER + " = ? AND content ~* ? "
                         + "ORDER BY (content ~* ?) DESC, " + CHUNK_INDEX + " LIMIT ?",
                 CHUNK, policyId.toString(), ownerId.toString(), EXCLUSION, EXCLUSION_SECTION, limit)
                 .stream().map(Chunk::document).toList();
+    }
+
+    /**
+     * The stemming rules for the question's language: French or English. Chinese has no word stems
+     * in Postgres; vector search alone handles it.
+     */
+    static String config(String question) {
+        if (question.codePoints().anyMatch(c -> Character.UnicodeScript.of(c) == Character.UnicodeScript.HAN)) {
+            return null;
+        }
+        return FRENCH.matcher(question).find() ? "french" : "english";
     }
 
     /** Ranks chunks that are the whole collection (used by tests). */

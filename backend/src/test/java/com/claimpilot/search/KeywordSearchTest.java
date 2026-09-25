@@ -53,4 +53,12 @@ class KeywordSearchTest {
         return new KeywordSearch.Chunk(Document.builder().id(id).text(id).build(), words,
                 words.values().stream().mapToInt(Integer::intValue).sum());
     }
+
+    @Test
+    void theQuestionIsStemmedInItsOwnLanguage() {
+        assertThat(KeywordSearch.config("Is massage therapy covered?")).isEqualTo("english");
+        assertThat(KeywordSearch.config("Est-ce que la massothérapie est couverte ?")).isEqualTo("french");
+        assertThat(KeywordSearch.config("Quel est le délai pour une réclamation")).isEqualTo("french");
+        assertThat(KeywordSearch.config("按摩治疗需要医生转介吗？")).isNull();
+    }
 }

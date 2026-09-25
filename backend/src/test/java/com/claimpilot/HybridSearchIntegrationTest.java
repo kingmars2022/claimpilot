@@ -38,8 +38,8 @@ class HybridSearchIntegrationTest extends IntegrationTestBase {
     @Test
     void theStemsAreStoredAndIndexed() {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM pg_indexes WHERE indexname IN "
-                + "('vector_store_words_idx', 'vector_store_document_idx')", Integer.class)).isEqualTo(2);
-        assertThat(jdbc.queryForObject("SELECT words::text FROM vector_store WHERE metadata->>'documentId' = ? "
+                + "('vector_store_stems_idx', 'vector_store_document_idx')", Integer.class)).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT stems::text FROM vector_store WHERE metadata->>'documentId' = ? "
                 + "AND content LIKE '%crowns%'", String.class, booklet.toString())).contains("'crown'");
     }
 
@@ -56,6 +56,21 @@ class HybridSearchIntegrationTest extends IntegrationTestBase {
         assertThat(keywords.search("What's the plan's limit for an x-ray? 'crown' | ! & (", owner, booklet, 5))
                 .isNotNull();
         assertThat(keywords.search("the and of", owner, booklet, 5)).as("only stop words").isEmpty();
+    }
+
+    @Test
+    void aFrenchQuestionIsStemmedWithFrenchRules() throws Exception {
+        String token = login("sam");
+        UUID french = UUID.fromString(upload(token, "policies", SampleDocuments.OWN_POLICY,
+                SampleDocuments.ownPolicyFrench()));
+
+        List<Document> found = keywords.search("Les massothérapies sont-elles remboursées ?", owner, french, 5);
+
+        assertThat(found).isNotEmpty();
+        assertThat(found.getFirst().getText()).contains("massothérapie");
+        assertThat(jdbc.queryForObject("SELECT stems::text FROM vector_store WHERE metadata->>'documentId' = ? "
+                + "AND content LIKE '%massothérapie%'", String.class, french.toString()))
+                .contains("'massothérap'").contains("'massothérapi'");
     }
 
     @Test
