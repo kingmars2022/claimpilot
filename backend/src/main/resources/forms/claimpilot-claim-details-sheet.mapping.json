@@ -1,0 +1,23 @@
+{
+  "plan_member": "MEMBER_NAME",
+  "plan_policy": "POLICY_NUMBER",
+  "plan_certificate": "CERTIFICATE_NUMBER",
+  "plan_sponsor": "PLAN_SPONSOR",
+  "patient_name": "PATIENT_NAME",
+  "patient_dob": "PATIENT_DOB",
+  "patient_relationship": "PATIENT_RELATIONSHIP",
+  "patient_address": "PATIENT_ADDRESS",
+  "patient_phone": "PATIENT_PHONE",
+  "first_insurer": "OTHER_INSURER",
+  "first_policy": "OTHER_POLICY_NUMBER",
+  "first_certificate": "OTHER_CERTIFICATE_NUMBER",
+  "exp_provider": "PROVIDER_NAME",
+  "exp_date": "SERVICE_DATE",
+  "exp_service": "SERVICE_TYPE",
+  "exp_receipt": "RECEIPT_NUMBER",
+  "exp_charged": "AMOUNT_CHARGED",
+  "exp_paid_first": "AMOUNT_PAID_BY_OTHER_PLAN",
+  "exp_claimed": "AMOUNT_CLAIMED",
+  "sign_member": "SIGNATURE",
+  "sign_date": "SIGNATURE_DATE"
+}

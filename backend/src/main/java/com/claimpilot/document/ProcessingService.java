@@ -160,7 +160,9 @@ public class ProcessingService {
         int fields = FormTemplate.of(doc.getFileName(), bytes).fields().size();
         if (fields == 0) {
             throw new IllegalStateException(
-                    "This PDF has no fillable fields. Upload the insurer's fillable (interactive) PDF form.");
+                    "This PDF has no fillable fields (a scan or a print-only form). Upload the insurer's "
+                            + "fillable PDF, or use the built-in Claim details sheet: it works with any insurer, "
+                            + "attached to their paper form.");
         }
         return fields;
     }

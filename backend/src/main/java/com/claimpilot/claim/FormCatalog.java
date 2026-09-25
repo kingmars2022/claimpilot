@@ -47,7 +47,7 @@ public class FormCatalog {
     record BuiltInForm(String name, String path) {
     }
 
-    /** The insurers' forms available out of the box, all fictional. */
+    /** The forms available out of the box: fictional insurers' forms, and a sheet for any insurer. */
     static final Map<String, BuiltInForm> BUILT_IN_FORMS = builtInForms();
 
     private static Map<String, BuiltInForm> builtInForms() {
@@ -63,6 +63,10 @@ public class FormCatalog {
         forms.put("builtin:boreale-vision", new BuiltInForm(
                 "Assurance Boréale: Réclamation soins de la vue (French)",
                 "forms/boreale-reclamation-soins-de-la-vue.pdf"));
+        // Not an insurer's form: for any insurer whose own form is a scan or print-only.
+        forms.put("builtin:claim-details", new BuiltInForm(
+                "Claim details sheet (any insurer; attach to their paper form)",
+                "forms/claimpilot-claim-details-sheet.pdf"));
         return java.util.Collections.unmodifiableMap(forms);
     }
 

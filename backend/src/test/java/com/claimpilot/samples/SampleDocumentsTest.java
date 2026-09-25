@@ -18,7 +18,8 @@ class SampleDocumentsTest {
             SampleDocuments.FRENCH_CLAIM_FORM, SampleDocuments::frenchClaimForm,
             SampleDocuments.NORTHGATE_FORM, SampleDocuments::northgateClaimForm,
             SampleDocuments.DRUG_FORM, SampleDocuments::drugClaimForm,
-            SampleDocuments.VISION_FORM, SampleDocuments::visionClaimForm);
+            SampleDocuments.VISION_FORM, SampleDocuments::visionClaimForm,
+            SampleDocuments.DETAILS_SHEET, SampleDocuments::claimDetailsSheet);
 
     @Test
     void generatingTwiceGivesTheSameBytes() {

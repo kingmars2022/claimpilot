@@ -53,6 +53,7 @@ public final class SampleDocuments {
     public static final String NORTHGATE_FORM = "northgate-health-dental-claim.pdf";
     public static final String DRUG_FORM = "prairie-shield-drug-claim.pdf";
     public static final String VISION_FORM = "boreale-reclamation-soins-de-la-vue.pdf";
+    public static final String DETAILS_SHEET = "claimpilot-claim-details-sheet.pdf";
     public static final String BOOKLET_POLICY = "northgate-benefits-booklet-daniel-okafor.pdf";
     public static final String SPOUSE_POLICY_SCANNED = "cedarview-policy-marc-gagnon-scanned.pdf";
     public static final String RECEIPT_SCANNED = "physio-receipt-2026-03-05-scanned.pdf";
@@ -95,6 +96,7 @@ public final class SampleDocuments {
         Files.write(forms.resolve(NORTHGATE_FORM), northgateClaimForm());
         Files.write(forms.resolve(DRUG_FORM), drugClaimForm());
         Files.write(forms.resolve(VISION_FORM), visionClaimForm());
+        Files.write(forms.resolve(DETAILS_SHEET), claimDetailsSheet());
         System.out.println("Sample documents written to " + samples.toAbsolutePath().normalize());
     }
 
@@ -496,6 +498,44 @@ public final class SampleDocuments {
                         checkbox("champ18", "Je certifie que ces renseignements sont exacts"),
                         field("champ19", "Signature de l'adh\u00e9rent"),
                         field("champ20", "Date (AAAA-MM-JJ)")));
+    }
+
+    /**
+     * Not an insurer's form: every detail a claim needs, filled in by ClaimPilot, for insurers whose
+     * own form is a scan or print-only. The member attaches it to the insurer's form or copies from it.
+     */
+    public static byte[] claimDetailsSheet() {
+        return fillableForm(List.of(
+                "CLAIM DETAILS SHEET",
+                "Supporting details for a health or dental claim - attach to your insurer's claim form",
+                "Prepared with ClaimPilot. Not an insurer's form: submit it with the form your insurer requires."),
+                List.of(
+                        section("Plan claimed on"),
+                        field("plan_member", "Plan member"),
+                        field("plan_policy", "Group policy number"),
+                        field("plan_certificate", "Certificate or member ID"),
+                        field("plan_sponsor", "Plan sponsor (employer)"),
+                        section("Patient"),
+                        field("patient_name", "Patient"),
+                        field("patient_dob", "Patient's date of birth (YYYY-MM-DD)"),
+                        field("patient_relationship", "Relationship to the plan member"),
+                        field("patient_address", "Address"),
+                        field("patient_phone", "Phone"),
+                        section("Plan that paid first"),
+                        field("first_insurer", "Insurer"),
+                        field("first_policy", "Group policy number"),
+                        field("first_certificate", "Certificate or member ID"),
+                        section("Expense"),
+                        field("exp_provider", "Provider"),
+                        field("exp_date", "Date of service (YYYY-MM-DD)"),
+                        field("exp_service", "Type of service"),
+                        field("exp_receipt", "Receipt number"),
+                        field("exp_charged", "Amount charged ($)"),
+                        field("exp_paid_first", "Paid by the first plan ($)"),
+                        field("exp_claimed", "Amount claimed ($)"),
+                        section("Signature"),
+                        field("sign_member", "Plan member's signature"),
+                        field("sign_date", "Date signed (YYYY-MM-DD)")));
     }
 
     /** One line of a generated form: a section title, a text field or a checkbox. */

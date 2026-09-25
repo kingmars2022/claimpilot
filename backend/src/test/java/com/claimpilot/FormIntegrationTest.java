@@ -106,7 +106,7 @@ class FormIntegrationTest extends IntegrationTestBase {
             status = JsonPath.read(form, "$.status");
         }
         assertThat(status).isEqualTo("FAILED");
-        assertThat((String) JsonPath.read(form, "$.errorMessage")).contains("no fillable fields");
+        assertThat((String) JsonPath.read(form, "$.errorMessage")).contains("no fillable fields").contains("Claim details sheet");
     }
 
     @Test
