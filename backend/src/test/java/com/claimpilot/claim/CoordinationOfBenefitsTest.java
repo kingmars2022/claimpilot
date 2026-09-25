@@ -8,6 +8,8 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
+import com.claimpilot.user.Custody;
+
 import com.claimpilot.claim.CoordinationOfBenefits.Decision;
 import com.claimpilot.claim.CoordinationOfBenefits.Household;
 import com.claimpilot.claim.CoordinationOfBenefits.Patient;
@@ -87,5 +89,72 @@ class CoordinationOfBenefitsTest {
         Household accents = new Household("FIONA TREMBLAY", null, "marc gagnón", null);
 
         assertThat(CoordinationOfBenefits.decide(Patient.ME, List.of(MARCS, FIONAS), accents).decided()).isTrue();
+    }
+
+    // ------------------------------------------------ separated or divorced parents
+
+    /** Fiona, separated from Luc (the children's father), now married to Marc. */
+    private static final Plan LUCS = new Plan(UUID.randomUUID(), "Northgate Life", "Luc Bergeron", "NG-55012");
+
+    private static Household separated(Custody custody, LocalDate lucsBirthday) {
+        return new Household("Fiona Tremblay", LocalDate.of(1991, 4, 17), "Marc Gagnon", LocalDate.of(1989, 11, 2),
+                custody, "Luc Bergeron", lucsBirthday);
+    }
+
+    @Test
+    void withCustodyTheMembersPlanPaysFirstThenTheStepParentsThenTheOtherParents() {
+        Decision decision = CoordinationOfBenefits.decide(Patient.CHILD, List.of(LUCS, MARCS, FIONAS),
+                separated(Custody.SOLE_ME, null));
+
+        assertThat(decision.decided()).isTrue();
+        assertThat(decision.rule()).isEqualTo("Custody rule");
+        assertThat(decision.order()).containsExactly(FIONAS.policyId(), MARCS.policyId(), LUCS.policyId());
+        assertThat(decision.secondPolicyId()).isEqualTo(MARCS.policyId());
+        assertThat(decision.relationshipOnSecond()).isEqualTo(Relationship.CHILD);
+        assertThat(decision.explanation()).contains("court order");
+    }
+
+    @Test
+    void whenTheOtherParentHasCustodyTheirPlanPaysFirstWhateverTheBirthdays() {
+        Decision decision = CoordinationOfBenefits.decide(Patient.CHILD, List.of(FIONAS, MARCS, LUCS),
+                separated(Custody.SOLE_OTHER_PARENT, LocalDate.of(1990, 12, 30)));
+
+        assertThat(decision.order()).containsExactly(LUCS.policyId(), FIONAS.policyId(), MARCS.policyId());
+    }
+
+    @Test
+    void withJointCustodyTheBirthdayRuleDecidesBetweenTheParentsAndTheStepParentComesLast() {
+        Decision lucFirst = CoordinationOfBenefits.decide(Patient.CHILD, List.of(FIONAS, MARCS, LUCS),
+                separated(Custody.JOINT, LocalDate.of(1990, 2, 3)));
+        assertThat(lucFirst.order()).containsExactly(LUCS.policyId(), FIONAS.policyId(), MARCS.policyId());
+        assertThat(lucFirst.explanation()).contains("February 3");
+
+        Decision fionaFirst = CoordinationOfBenefits.decide(Patient.CHILD, List.of(FIONAS, MARCS, LUCS),
+                separated(Custody.JOINT, LocalDate.of(1990, 8, 3)));
+        assertThat(fionaFirst.order()).containsExactly(FIONAS.policyId(), LUCS.policyId(), MARCS.policyId());
+
+        Decision noBirthday = CoordinationOfBenefits.decide(Patient.CHILD, List.of(FIONAS, LUCS),
+                separated(Custody.JOINT, null));
+        assertThat(noBirthday.decided()).isFalse();
+        assertThat(noBirthday.explanation()).contains("birthdays");
+    }
+
+    @Test
+    void custodyOnlyChangesTheRuleForChildren() {
+        Decision forMe = CoordinationOfBenefits.decide(Patient.ME, List.of(FIONAS, MARCS, LUCS),
+                separated(Custody.SOLE_OTHER_PARENT, null));
+
+        assertThat(forMe.firstPolicyId()).isEqualTo(FIONAS.policyId());
+        assertThat(forMe.secondPolicyId()).isEqualTo(MARCS.policyId());
+    }
+
+    @Test
+    void separatedWithoutASecondPlanIsReportedNotGuessed() {
+        Household noOtherParent = new Household("Fiona Tremblay", null, null, null, Custody.SOLE_ME, null, null);
+
+        Decision decision = CoordinationOfBenefits.decide(Patient.CHILD, List.of(FIONAS), noOtherParent);
+
+        assertThat(decision.decided()).isFalse();
+        assertThat(decision.explanation()).contains("other parent");
     }
 }

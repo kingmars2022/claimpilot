@@ -79,7 +79,8 @@ public class CoordinationService {
                 ? new CoordinationOfBenefits.Household(user.getDisplayName(), null, null, null)
                 : new CoordinationOfBenefits.Household(
                         profile.getFullName() == null ? user.getDisplayName() : profile.getFullName(),
-                        profile.getDateOfBirth(), profile.getSpouseName(), profile.getSpouseDateOfBirth());
+                        profile.getDateOfBirth(), profile.getSpouseName(), profile.getSpouseDateOfBirth(),
+                        profile.getCustody(), profile.getOtherParentName(), profile.getOtherParentDateOfBirth());
     }
 
     private static String label(DocumentResponse d) {

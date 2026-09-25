@@ -208,7 +208,13 @@ export interface Profile {
   phone: string | null;
   spouseName: string | null;
   spouseDateOfBirth: string | null;
+  custody: Custody;
+  otherParentName: string | null;
+  otherParentDateOfBirth: string | null;
 }
+
+/** Who the member's children live with; separated parents follow custody rules. */
+export type Custody = 'TOGETHER' | 'SOLE_ME' | 'SOLE_OTHER_PARENT' | 'JOINT';
 
 export type Patient = 'ME' | 'SPOUSE' | 'CHILD';
 
@@ -220,6 +226,8 @@ export interface Coordination {
   relationshipOnSecond: Relationship | null;
   rule: string | null;
   explanation: string;
+  /** Every plan that can pay, in the order they pay. */
+  order: string[];
 }
 
 export interface LoginResponse {

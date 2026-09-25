@@ -75,7 +75,17 @@ class AccountIntegrationTest extends IntegrationTestBase {
                 .andExpect(status().isOk());
         mvc.perform(as(token, get("/api/profile")))
                 .andExpect(jsonPath("$.fullName").value("New Member"))
-                .andExpect(jsonPath("$.dateOfBirth").value("1990-02-03"));
+                .andExpect(jsonPath("$.dateOfBirth").value("1990-02-03"))
+                .andExpect(jsonPath("$.custody").value("TOGETHER"));
+
+        mvc.perform(as(token, put("/api/profile").contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("fullName", "New Member", "custody", "JOINT",
+                                "otherParentName", "Luc Bergeron", "otherParentDateOfBirth", "1990-08-03")))))
+                .andExpect(status().isOk());
+        mvc.perform(as(token, get("/api/profile")))
+                .andExpect(jsonPath("$.custody").value("JOINT"))
+                .andExpect(jsonPath("$.otherParentName").value("Luc Bergeron"))
+                .andExpect(jsonPath("$.otherParentDateOfBirth").value("1990-08-03"));
     }
 
     @Test
