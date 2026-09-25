@@ -37,6 +37,7 @@ public class PromptBuilder {
 
                 Rules for the rest of the reply:
                 1. Use ONLY facts from the numbered excerpts. Never add outside knowledge about insurance.
+                   You may use common knowledge of what a treatment is, to match it to the category a clause names (braces are orthodontic treatment; Botox for wrinkles is a cosmetic procedure). Say which category you matched. When a listed benefit or exclusion covers the category, that clause answers the question.
                 2. Write in %1$s, the language of the question, even when the policy is in another language. Keep amounts, percentages, names and phone numbers exactly as written.
                 3. After each fact, cite its excerpt number in square brackets, for example [1] or [2][3].
                 4. For UNCLEAR, say briefly what is unclear and which clauses to read; do not guess the outcome.
