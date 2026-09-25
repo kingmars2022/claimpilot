@@ -2,6 +2,7 @@ package com.claimpilot.chat;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,9 +37,12 @@ public class ChatService {
 
     private static final int SNIPPET_LENGTH = 320;
     private static final int UNCLEAR_CLAUSES = 3;
+    private static final int EXCLUSION_CLAUSES = 2;
+    private static final int RRF_K = 60;
 
     private final CachedModel model;
     private final VectorStore vectorStore;
+    private final KeywordSearch keywords;
     private final PromptBuilder promptBuilder;
     private final ConversationService conversations;
     private final DocumentService documents;
@@ -46,11 +50,12 @@ public class ChatService {
     private final AppProperties.Retrieval retrieval;
     private final int historyTurns;
 
-    public ChatService(CachedModel model, VectorStore vectorStore, PromptBuilder promptBuilder,
+    public ChatService(CachedModel model, VectorStore vectorStore, KeywordSearch keywords, PromptBuilder promptBuilder,
                        ConversationService conversations, DocumentService documents, CallKitBuilder callKits,
                        AppProperties properties) {
         this.model = model;
         this.vectorStore = vectorStore;
+        this.keywords = keywords;
         this.promptBuilder = promptBuilder;
         this.conversations = conversations;
         this.documents = documents;
@@ -131,18 +136,26 @@ public class ChatService {
     }
 
     /**
-     * Finds the clauses for a question, only in this user's chosen policy. A follow-up is also
-     * searched together with the previous question and the two result lists are merged by score:
-     * one extra embedding lookup (milliseconds) instead of an extra model call.
+     * Finds the clauses for a question, only in this user's chosen policy. Two searches run side by
+     * side: vector search (meaning) and keyword search (exact terms). A follow-up is also searched
+     * together with the previous question. The lists are merged by rank, and a coverage question
+     * always sees the policy's exclusions.
      */
     private List<Document> retrieve(String question, List<ChatMessage> history, AppUser user, UUID policyId) {
-        List<Document> direct = vectorStore.similaritySearch(searchRequest(question, user, policyId));
+        List<List<Document>> lists = new ArrayList<>();
+        lists.add(vectorStore.similaritySearch(searchRequest(question, user, policyId)));
         String contextual = PromptBuilder.contextualQuery(history, question);
-        if (contextual.equals(question)) {
-            return direct;
+        if (!contextual.equals(question)) {
+            lists.add(vectorStore.similaritySearch(searchRequest(contextual, user, policyId)));
         }
-        List<Document> withContext = vectorStore.similaritySearch(searchRequest(contextual, user, policyId));
-        return mergeByScore(direct, withContext, retrieval.topK());
+        lists.add(keywords.search(question, user.getId(), policyId, retrieval.topK()));
+        List<Document> fused = new ArrayList<>(fuse(lists, retrieval.topK()));
+        for (Document exclusion : keywords.exclusions(question, user.getId(), policyId, EXCLUSION_CLAUSES)) {
+            if (fused.stream().noneMatch(d -> d.getId().equals(exclusion.getId()))) {
+                fused.add(exclusion);
+            }
+        }
+        return fused;
     }
 
     private SearchRequest searchRequest(String query, AppUser user, UUID policyId) {
@@ -154,16 +167,23 @@ public class ChatService {
                 .build();
     }
 
-    /** Keeps each chunk once with its best score, highest first, at most {@code limit}. */
-    static List<Document> mergeByScore(List<Document> first, List<Document> second, int limit) {
-        Map<String, Document> best = new LinkedHashMap<>();
-        List<Document> all = new ArrayList<>(first);
-        all.addAll(second);
-        for (Document doc : all) {
-            best.merge(doc.getId(), doc, (a, b) -> score(b) > score(a) ? b : a);
+    /**
+     * Reciprocal rank fusion: each chunk scores 1/(60 + rank) in every list it appears in, so a
+     * chunk found by both searches comes first. Keeps each chunk once, with its best similarity
+     * score for display, at most {@code limit}.
+     */
+    static List<Document> fuse(List<List<Document>> lists, int limit) {
+        Map<String, Double> fusedScore = new HashMap<>();
+        Map<String, Document> byId = new LinkedHashMap<>();
+        for (List<Document> list : lists) {
+            for (int rank = 0; rank < list.size(); rank++) {
+                Document doc = list.get(rank);
+                fusedScore.merge(doc.getId(), 1.0 / (RRF_K + rank + 1), Double::sum);
+                byId.merge(doc.getId(), doc, (a, b) -> score(b) > score(a) ? b : a);
+            }
         }
-        return best.values().stream()
-                .sorted(Comparator.comparingDouble(ChatService::score).reversed())
+        return byId.values().stream()
+                .sorted(Comparator.comparingDouble((Document d) -> fusedScore.get(d.getId())).reversed())
                 .limit(limit)
                 .toList();
     }
