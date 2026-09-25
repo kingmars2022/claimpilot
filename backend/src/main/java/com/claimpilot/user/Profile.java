@@ -5,8 +5,6 @@ import java.time.LocalDate;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
@@ -30,11 +28,6 @@ public class Profile {
     private String phone;
     private String spouseName;
     private LocalDate spouseDateOfBirth;
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private Custody custody = Custody.TOGETHER;
-    private String otherParentName;
-    private LocalDate otherParentDateOfBirth;
 
     @Column(nullable = false)
     private Instant updatedAt;
@@ -58,9 +51,6 @@ public class Profile {
         this.phone = blankToNull(dto.phone());
         this.spouseName = blankToNull(dto.spouseName());
         this.spouseDateOfBirth = dto.spouseDateOfBirth();
-        this.custody = dto.custody() == null ? Custody.TOGETHER : dto.custody();
-        this.otherParentName = blankToNull(dto.otherParentName());
-        this.otherParentDateOfBirth = dto.otherParentDateOfBirth();
         this.updatedAt = Instant.now();
     }
 
@@ -117,18 +107,6 @@ public class Profile {
 
     public LocalDate getSpouseDateOfBirth() {
         return spouseDateOfBirth;
-    }
-
-    public Custody getCustody() {
-        return custody;
-    }
-
-    public String getOtherParentName() {
-        return otherParentName;
-    }
-
-    public LocalDate getOtherParentDateOfBirth() {
-        return otherParentDateOfBirth;
     }
 
     public Instant getUpdatedAt() {

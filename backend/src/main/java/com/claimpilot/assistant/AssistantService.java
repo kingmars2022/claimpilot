@@ -96,7 +96,7 @@ public class AssistantService {
      */
     private AssistantPlan checkOrder(AppUser user, AssistantPlan plan, boolean chosenByMember,
                                      List<AssistantDtos.Step> steps) {
-        return coordination.conflictWith(user, plan.policyId(), plan.relationship())
+        return coordination.conflictWith(user, plan.policyId(), plan.relationship(), null)
                 .map(decision -> {
                     if (chosenByMember) {
                         steps.add(AssistantDtos.Step.note("Check which plan pays first", decision.explanation()));

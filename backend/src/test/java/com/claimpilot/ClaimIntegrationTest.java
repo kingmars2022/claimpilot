@@ -196,6 +196,31 @@ class ClaimIntegrationTest extends IntegrationTestBase {
                 "Plan member signature");
     }
 
+    @Test
+    void aChildsClaimNamesTheChildAsThePatient() throws Exception {
+        String children = mvc.perform(as(token, get("/api/profile/children")))
+                .andReturn().getResponse().getContentAsString();
+        List<Integer> ids = JsonPath.read(children, "$[?(@.fullName == 'Léa Gagnon')].id");
+        assertThat(ids).as("the demo account's daughter").hasSize(1);
+        Integer lea = ids.getFirst();
+
+        String draft = mvc.perform(as(token, post("/api/claims").contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("claimType", "SECONDARY_PARAMEDICAL", "policyId", spousePolicy,
+                                "otherPolicyId", ownPolicy, "receiptId", receipt, "relationship", "CHILD",
+                                "childId", lea)))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(field(draft, "PATIENT_NAME")).containsEntry("value", "Léa Gagnon");
+        assertThat(field(draft, "PATIENT_DOB")).containsEntry("value", "2019-05-12");
+        assertThat(field(draft, "PATIENT_RELATIONSHIP")).containsEntry("value", "Child");
+
+        String forLea = mvc.perform(as(token, get("/api/claims/coordination").param("patient", "CHILD")
+                        .param("child", lea.toString())))
+                .andReturn().getResponse().getContentAsString();
+        assertThat((String) JsonPath.read(forLea, "$.rule")).isEqualTo("Birthday rule");
+    }
+
     private String createDraft() throws Exception {
         return mvc.perform(as(token, post("/api/claims").contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("claimType", "SECONDARY_PARAMEDICAL", "policyId", spousePolicy,

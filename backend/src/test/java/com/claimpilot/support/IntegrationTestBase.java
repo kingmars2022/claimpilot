@@ -189,6 +189,11 @@ public abstract class IntegrationTestBase {
         if (value instanceof List<?> list) {
             return "[" + String.join(",", list.stream().map(IntegrationTestBase::jsonValue).toList()) + "]";
         }
+        if (value instanceof Map<?, ?> map) {
+            @SuppressWarnings("unchecked")
+            Map<String, ?> object = (Map<String, ?>) map;
+            return json(object);
+        }
         return "\"" + value.toString().replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 

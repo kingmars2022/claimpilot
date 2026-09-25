@@ -75,17 +75,41 @@ class AccountIntegrationTest extends IntegrationTestBase {
                 .andExpect(status().isOk());
         mvc.perform(as(token, get("/api/profile")))
                 .andExpect(jsonPath("$.fullName").value("New Member"))
-                .andExpect(jsonPath("$.dateOfBirth").value("1990-02-03"))
-                .andExpect(jsonPath("$.custody").value("TOGETHER"));
+                .andExpect(jsonPath("$.dateOfBirth").value("1990-02-03"));
+    }
 
-        mvc.perform(as(token, put("/api/profile").contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("fullName", "New Member", "custody", "JOINT",
-                                "otherParentName", "Luc Bergeron", "otherParentDateOfBirth", "1990-08-03")))))
+    @Test
+    void childrenAreAddedUpdatedAndRemovedEachWithTheirOwnCustody() throws Exception {
+        String body = mvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("username", "parent.member", "displayName", "Parent",
+                                "password", "password123"))))
+                .andReturn().getResponse().getContentAsString();
+        String token = JsonPath.read(body, "$.token");
+
+        String saved = mvc.perform(as(token, put("/api/profile/children").contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("children", List.of(
+                                Map.of("fullName", "Noah Bergeron", "dateOfBirth", "2016-03-01", "custody", "JOINT",
+                                        "otherParentName", "Luc Bergeron", "otherParentDateOfBirth", "1990-08-03"),
+                                Map.of("fullName", "Léa Gagnon", "dateOfBirth", "2019-05-12")))))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].custody").value("JOINT"))
+                .andExpect(jsonPath("$[1].custody").value("TOGETHER"))
+                .andReturn().getResponse().getContentAsString();
+        Integer lea = JsonPath.read(saved, "$[1].id");
+
+        mvc.perform(as(token, put("/api/profile/children").contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("children", List.of(
+                                Map.of("id", lea, "fullName", "Léa Gagnon", "dateOfBirth", "2019-05-12",
+                                        "custody", "SOLE_ME")))))))
                 .andExpect(status().isOk());
-        mvc.perform(as(token, get("/api/profile")))
-                .andExpect(jsonPath("$.custody").value("JOINT"))
-                .andExpect(jsonPath("$.otherParentName").value("Luc Bergeron"))
-                .andExpect(jsonPath("$.otherParentDateOfBirth").value("1990-08-03"));
+        mvc.perform(as(token, get("/api/profile/children")))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(lea))
+                .andExpect(jsonPath("$[0].custody").value("SOLE_ME"));
+
+        mvc.perform(as(token, put("/api/profile/children").contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("children", List.of(Map.of("fullName", " ")))))))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

@@ -25,6 +25,8 @@ import com.claimpilot.extraction.DocumentFact;
 import com.claimpilot.extraction.DocumentFactRepository;
 import com.claimpilot.extraction.FactKey;
 import com.claimpilot.user.AppUser;
+import com.claimpilot.user.Child;
+import com.claimpilot.user.ChildRepository;
 import com.claimpilot.user.Profile;
 import com.claimpilot.user.ProfileRepository;
 
@@ -40,18 +42,20 @@ public class ClaimDraftService {
     private final DocumentService documents;
     private final DocumentFactRepository facts;
     private final ProfileRepository profiles;
+    private final ChildRepository children;
     private final FieldMappingService mappings;
     private final FormCatalog forms;
     private final AuditService audit;
 
     public ClaimDraftService(ClaimDraftRepository drafts, DocumentService documents, DocumentFactRepository facts,
-                             ProfileRepository profiles, FieldMappingService mappings, FormCatalog forms,
-                             AuditService audit) {
+                             ProfileRepository profiles, ChildRepository children, FieldMappingService mappings,
+                             FormCatalog forms, AuditService audit) {
         this.audit = audit;
         this.drafts = drafts;
         this.documents = documents;
         this.facts = facts;
         this.profiles = profiles;
+        this.children = children;
         this.mappings = mappings;
         this.forms = forms;
     }
@@ -71,8 +75,9 @@ public class ClaimDraftService {
                 ? FormCatalog.DEFAULT_KEY : request.formKey();
         FormTemplate form = forms.resolve(user, formKey);
 
+        Child child = request.relationship() == Relationship.CHILD ? child(user, request.childId()) : null;
         Map<DataKey, DraftValue> values = ClaimValueAssembler.assemble(source(policy), source(other),
-                source(receipt), profile, request.relationship());
+                source(receipt), profile, request.relationship(), child);
 
         ClaimDraft draft = new ClaimDraft(user.getId(), request.claimType(), policy.getId(),
                 other == null ? null : other.getId(), receipt == null ? null : receipt.getId(),
@@ -84,6 +89,16 @@ public class ClaimDraftService {
         audit.record(user.getId(), AuditAction.CLAIM_CREATED, "CLAIM", saved.getId(),
                 request.claimType().label() + " on " + forms.name(user, formKey));
         return toDto(user, saved);
+    }
+
+    /** The child a claim is for: the one chosen, or the only one; null when it cannot be told. */
+    private Child child(AppUser user, Long childId) {
+        if (childId != null) {
+            return children.findByIdAndUserId(childId, user.getId())
+                    .orElseThrow(() -> new NotFoundException("Child " + childId + " does not exist."));
+        }
+        List<Child> all = children.findByUserIdOrderById(user.getId());
+        return all.size() == 1 ? all.getFirst() : null;
     }
 
     /** Newest first, one page at a time; the form details are worked out once per form, not per claim. */

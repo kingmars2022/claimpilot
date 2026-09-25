@@ -1554,3 +1554,28 @@ code {
   border-left: 4px solid var(--spruce);
   background: var(--spruce-soft);
 }
+
+.children {
+  margin-top: 2rem;
+}
+
+.children fieldset.child {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  margin: 0 0 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.children legend {
+  font-weight: 600;
+  padding: 0 0.35rem;
+}
+
+.child-choice {
+  display: grid;
+  gap: 0.25rem;
+  max-width: 20rem;
+  margin: 0.5rem 0;
+}

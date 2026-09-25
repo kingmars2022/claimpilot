@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, type ActivityEntry, type Custody, type Profile } from '../api';
+import { api, type ActivityEntry, type Profile } from '../api';
+import ChildrenEditor from './ChildrenEditor';
 import { useSession } from '../auth';
 import { dateTime, errorText } from './shared';
 
@@ -13,21 +14,9 @@ const EMPTY: Profile = {
   phone: null,
   spouseName: null,
   spouseDateOfBirth: null,
-  custody: 'TOGETHER',
-  otherParentName: null,
-  otherParentDateOfBirth: null,
 };
 
-const CUSTODY: { value: Custody; label: string }[] = [
-  { value: 'TOGETHER', label: 'With me and my spouse (their other parent)' },
-  { value: 'SOLE_ME', label: 'Separated: I have custody' },
-  { value: 'SOLE_OTHER_PARENT', label: 'Separated: their other parent has custody' },
-  { value: 'JOINT', label: 'Separated: joint custody' },
-];
-
-type TextKey = Exclude<keyof Profile, 'custody'>;
-
-const FIELDS: { key: TextKey; label: string; type?: string; autoComplete?: string }[] = [
+const FIELDS: { key: keyof Profile; label: string; type?: string; autoComplete?: string }[] = [
   { key: 'fullName', label: 'Full name', autoComplete: 'name' },
   { key: 'dateOfBirth', label: 'Date of birth', type: 'date', autoComplete: 'bday' },
   { key: 'street', label: 'Street address', autoComplete: 'street-address' },
@@ -37,11 +26,6 @@ const FIELDS: { key: TextKey; label: string; type?: string; autoComplete?: strin
   { key: 'phone', label: 'Phone', type: 'tel', autoComplete: 'tel' },
   { key: 'spouseName', label: "Spouse's full name (as on their plan)" },
   { key: 'spouseDateOfBirth', label: "Spouse's date of birth", type: 'date' },
-];
-
-const OTHER_PARENT_FIELDS: { key: TextKey; label: string; type?: string }[] = [
-  { key: 'otherParentName', label: "Children's other parent (as on their plan)" },
-  { key: 'otherParentDateOfBirth', label: "Other parent's date of birth", type: 'date' },
 ];
 
 const ACTION_LABELS: Record<string, string> = {
@@ -117,43 +101,14 @@ export default function ProfileView() {
             />
           </label>
         ))}
-        <label>
-          My children live
-          <select
-            value={profile.custody}
-            onChange={(e) => setProfile({ ...profile, custody: e.target.value as Custody })}
-          >
-            {CUSTODY.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {profile.custody !== 'TOGETHER' && (
-          <>
-            <p className="muted small">
-              For separated parents, custody decides which plan pays first for a child. Your spouse above is then the
-              children's step-parent.
-            </p>
-            {OTHER_PARENT_FIELDS.map((f) => (
-              <label key={f.key}>
-                {f.label}
-                <input
-                  type={f.type ?? 'text'}
-                  value={profile[f.key] ?? ''}
-                  onChange={(e) => setProfile({ ...profile, [f.key]: e.target.value || null })}
-                />
-              </label>
-            ))}
-          </>
-        )}
         {message && <p className="small">{message}</p>}
         {error && <p className="error">{error}</p>}
         <button type="submit" className="primary">
           Save profile
         </button>
       </form>
+
+      <ChildrenEditor />
 
       <section className="activity">
         <h2>Activity</h2>

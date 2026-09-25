@@ -208,13 +208,20 @@ export interface Profile {
   phone: string | null;
   spouseName: string | null;
   spouseDateOfBirth: string | null;
+}
+
+/** Who a child lives with; children of separated parents follow custody rules. */
+export type Custody = 'TOGETHER' | 'SOLE_ME' | 'SOLE_OTHER_PARENT' | 'JOINT';
+
+/** A child of the member: the patient on a child's claim, with their own custody arrangement. */
+export interface Child {
+  id: number | null;
+  fullName: string;
+  dateOfBirth: string | null;
   custody: Custody;
   otherParentName: string | null;
   otherParentDateOfBirth: string | null;
 }
-
-/** Who the member's children live with; separated parents follow custody rules. */
-export type Custody = 'TOGETHER' | 'SOLE_ME' | 'SOLE_OTHER_PARENT' | 'JOINT';
 
 export type Patient = 'ME' | 'SPOUSE' | 'CHILD';
 
@@ -349,7 +356,10 @@ export const api = {
   guide: (policyId: string, type: ClaimType) =>
     request<ClaimGuide>(`/api/claims/guide?policyId=${policyId}&type=${type}`),
   drafts: () => request<ClaimDraft[]>('/api/claims'),
-  coordination: (patient: Patient) => request<Coordination>(`/api/claims/coordination?patient=${patient}`),
+  coordination: (patient: Patient, childId: number | null) =>
+    request<Coordination>(
+      `/api/claims/coordination?patient=${patient}${childId != null ? `&child=${childId}` : ''}`,
+    ),
   draft: (id: string) => request<ClaimDraft>(`/api/claims/${id}`),
   createDraft: (body: {
     claimType: ClaimType;
@@ -358,6 +368,7 @@ export const api = {
     receiptId: string | null;
     relationship: Relationship;
     formKey: string | null;
+    childId: number | null;
   }) => request<ClaimDraft>('/api/claims', json('POST', body)),
   forms: () => request<FormOption[]>('/api/forms'),
   uploadForm: (file: File) => uploadTo('forms', file),
@@ -391,5 +402,7 @@ export const api = {
 
   profile: () => request<Profile>('/api/profile'),
   saveProfile: (profile: Profile) => request<Profile>('/api/profile', json('PUT', profile)),
+  children: () => request<Child[]>('/api/profile/children'),
+  saveChildren: (children: Child[]) => request<Child[]>('/api/profile/children', json('PUT', { children })),
   deleteAccount: () => request<void>('/api/account', { method: 'DELETE' }),
 };

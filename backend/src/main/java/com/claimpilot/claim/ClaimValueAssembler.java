@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import com.claimpilot.extraction.DocumentFact;
 import com.claimpilot.extraction.FactKey;
+import com.claimpilot.user.Child;
 import com.claimpilot.user.Profile;
 
 /**
@@ -38,7 +39,7 @@ public final class ClaimValueAssembler {
     }
 
     public static Map<DataKey, DraftValue> assemble(Source policy, Source otherPolicy, Source receipt,
-                                                    Profile profile, Relationship relationship) {
+                                                    Profile profile, Relationship relationship, Child child) {
         Map<DataKey, DraftValue> values = new EnumMap<>(DataKey.class);
         values.put(DataKey.MEMBER_NAME, fromFact(policy, FactKey.PLAN_MEMBER_NAME, SourceType.POLICY));
         values.put(DataKey.POLICY_NUMBER, fromFact(policy, FactKey.POLICY_NUMBER, SourceType.POLICY));
@@ -58,13 +59,21 @@ public final class ClaimValueAssembler {
         values.put(DataKey.AMOUNT_PAID_BY_OTHER_PLAN,
                 fromFact(receipt, FactKey.AMOUNT_PAID_BY_OTHER_PLAN, SourceType.RECEIPT));
 
-        values.put(DataKey.PATIENT_NAME, profileValue(profile == null ? null : profile.getFullName(), "full name"));
+        if (relationship == Relationship.CHILD) {
+            // The patient is the child: name and birth date from the child in the profile, else the receipt.
+            values.put(DataKey.PATIENT_NAME, profileValue(child == null ? null : child.getFullName(), "child's name"));
+            values.put(DataKey.PATIENT_DOB, profileValue(
+                    child == null || child.getDateOfBirth() == null ? null : child.getDateOfBirth().toString(),
+                    "child's date of birth"));
+        } else {
+            values.put(DataKey.PATIENT_NAME, profileValue(profile == null ? null : profile.getFullName(), "full name"));
+            values.put(DataKey.PATIENT_DOB, profileValue(
+                    profile == null || profile.getDateOfBirth() == null ? null : profile.getDateOfBirth().toString(),
+                    "date of birth"));
+        }
         if (values.get(DataKey.PATIENT_NAME).sourceType() == SourceType.MISSING) {
             values.put(DataKey.PATIENT_NAME, fromFact(receipt, FactKey.PATIENT_NAME, SourceType.RECEIPT));
         }
-        values.put(DataKey.PATIENT_DOB, profileValue(
-                profile == null || profile.getDateOfBirth() == null ? null : profile.getDateOfBirth().toString(),
-                "date of birth"));
         values.put(DataKey.PATIENT_ADDRESS, profileValue(profile == null ? null : profile.address(), "address"));
         values.put(DataKey.PATIENT_PHONE, profileValue(profile == null ? null : profile.getPhone(), "phone"));
         values.put(DataKey.PATIENT_RELATIONSHIP, new DraftValue(relationship.label(), SourceType.CLAIM_SETUP, null,

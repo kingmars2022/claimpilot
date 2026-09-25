@@ -3,6 +3,7 @@ import {
   api,
   type ClaimDraft,
   type ClaimGuide,
+  type Child,
   type ClaimType,
   type Coordination,
   type DraftField,
@@ -122,7 +123,19 @@ function NewClaim({ onCreated }: { onCreated: (draft: ClaimDraft) => void }) {
   const [receiptId, setReceiptId] = useState('');
   const [relationship, setRelationship] = useState<Relationship>('SPOUSE');
   const [patient, setPatient] = useState<Patient | ''>('');
+  const [children, setChildren] = useState<Child[]>([]);
+  const [childId, setChildId] = useState<number | null>(null);
   const [coordination, setCoordination] = useState<Coordination | null>(null);
+
+  useEffect(() => {
+    api.children().then(
+      (list) => {
+        setChildren(list);
+        if (list.length === 1) setChildId(list[0].id);
+      },
+      () => setChildren([]),
+    );
+  }, []);
 
   // Coordination of benefits: once the member says who received the care, the plan that pays first
   // and the plan to claim the balance on are filled in (still changeable below).
@@ -130,7 +143,7 @@ function NewClaim({ onCreated }: { onCreated: (draft: ClaimDraft) => void }) {
     setCoordination(null);
     if (!patient) return;
     let cancelled = false;
-    api.coordination(patient).then(
+    api.coordination(patient, patient === 'CHILD' ? childId : null).then(
       (decision) => {
         if (cancelled) return;
         setCoordination(decision);
@@ -145,7 +158,7 @@ function NewClaim({ onCreated }: { onCreated: (draft: ClaimDraft) => void }) {
     return () => {
       cancelled = true;
     };
-  }, [patient]);
+  }, [patient, childId]);
   const [guide, setGuide] = useState<ClaimGuide | null>(null);
   const [guideLoading, setGuideLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -185,6 +198,7 @@ function NewClaim({ onCreated }: { onCreated: (draft: ClaimDraft) => void }) {
           receiptId: receiptId || null,
           relationship,
           formKey,
+          childId: relationship === 'CHILD' ? childId : null,
         }),
       );
     } catch (err) {
@@ -219,6 +233,22 @@ function NewClaim({ onCreated }: { onCreated: (draft: ClaimDraft) => void }) {
             </button>
           ))}
         </div>
+        {patient === 'CHILD' && children.length > 1 && (
+          <label className="child-choice">
+            Which child?
+            <select value={childId ?? ''} onChange={(e) => setChildId(e.target.value ? Number(e.target.value) : null)}>
+              <option value="">Choose…</option>
+              {children.map((c) => (
+                <option key={c.id} value={c.id ?? ''}>
+                  {c.fullName}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {patient === 'CHILD' && children.length === 0 && (
+          <p className="field-hint">Add your child in My profile so their name and birth date go on the form.</p>
+        )}
         {coordination && (
           <p className={coordination.decided ? 'coordination' : 'field-hint'}>
             {coordination.decided && <strong>{coordination.rule}: </strong>}

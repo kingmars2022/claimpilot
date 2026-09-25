@@ -21,6 +21,7 @@ public final class ClaimDtos {
      * @param otherPolicyId the plan that paid first, if any
      * @param receiptId     the receipt for the care
      * @param formKey       the form to fill (see {@link FormCatalog}); the default Cedarview form if empty
+     * @param childId       for a child's claim, which child (the patient); optional with one child
      */
     public record CreateDraft(
             @NotNull ClaimType claimType,
@@ -28,7 +29,13 @@ public final class ClaimDtos {
             UUID otherPolicyId,
             UUID receiptId,
             @NotNull Relationship relationship,
-            @Size(max = 100) String formKey) {
+            @Size(max = 100) String formKey,
+            Long childId) {
+
+        public CreateDraft(ClaimType claimType, UUID policyId, UUID otherPolicyId, UUID receiptId,
+                           Relationship relationship, String formKey) {
+            this(claimType, policyId, otherPolicyId, receiptId, relationship, formKey, null);
+        }
     }
 
     public record FormRef(String key, String name) {

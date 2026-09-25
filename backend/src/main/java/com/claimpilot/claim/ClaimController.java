@@ -41,8 +41,9 @@ public class ClaimController {
 
     /** Which of the member's plans pays first for this patient, and which to claim the balance on. */
     @GetMapping("/coordination")
-    public CoordinationOfBenefits.Decision coordination(@RequestParam CoordinationOfBenefits.Patient patient) {
-        return coordination.decide(currentUser.get(), patient);
+    public CoordinationOfBenefits.Decision coordination(@RequestParam CoordinationOfBenefits.Patient patient,
+                                                        @RequestParam(required = false) Long child) {
+        return coordination.decide(currentUser.get(), patient, child);
     }
 
     @GetMapping("/types")

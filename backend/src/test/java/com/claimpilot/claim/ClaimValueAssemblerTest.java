@@ -12,6 +12,8 @@ import com.claimpilot.extraction.DocumentFact;
 import com.claimpilot.extraction.ExtractedFact;
 import com.claimpilot.extraction.FactKey;
 import com.claimpilot.user.Profile;
+import com.claimpilot.user.Child;
+import com.claimpilot.user.ChildDto;
 import com.claimpilot.user.ProfileDto;
 
 class ClaimValueAssemblerTest {
@@ -32,7 +34,7 @@ class ClaimValueAssemblerTest {
                         FactKey.AMOUNT_CHARGED, fact(RECEIPT, FactKey.AMOUNT_CHARGED, "120.00", 1, true),
                         FactKey.AMOUNT_PAID_BY_OTHER_PLAN,
                         fact(RECEIPT, FactKey.AMOUNT_PAID_BY_OTHER_PLAN, "84.00", 1, false))),
-                profile(), Relationship.SPOUSE);
+                profile(), Relationship.SPOUSE, null);
 
         assertThat(values.get(DataKey.MEMBER_NAME)).satisfies(v -> {
             assertThat(v.value()).isEqualTo("Marc Gagnon");
@@ -53,6 +55,25 @@ class ClaimValueAssemblerTest {
     }
 
     @Test
+    void forAChildThePatientIsTheChild() {
+        ClaimValueAssembler.Source none = new ClaimValueAssembler.Source(RECEIPT, "receipt.pdf", Map.of());
+        Child lea = new Child(1L, new ChildDto(null, "Léa Gagnon", LocalDate.of(2019, 5, 12), null, null, null));
+
+        Map<DataKey, DraftValue> values = ClaimValueAssembler.assemble(none, none, none, profile(),
+                Relationship.CHILD, lea);
+
+        assertThat(values.get(DataKey.PATIENT_NAME).value()).isEqualTo("Léa Gagnon");
+        assertThat(values.get(DataKey.PATIENT_DOB).value()).isEqualTo("2019-05-12");
+        assertThat(values.get(DataKey.PATIENT_ADDRESS).value()).as("the household's address")
+                .isEqualTo("4820 rue Fabre, Montreal QC H2J 3W1");
+
+        Map<DataKey, DraftValue> unknownChild = ClaimValueAssembler.assemble(none, none, none, profile(),
+                Relationship.CHILD, null);
+        assertThat(unknownChild.get(DataKey.PATIENT_NAME).value()).as("never the parent's name").isNull();
+        assertThat(unknownChild.get(DataKey.PATIENT_DOB).value()).isNull();
+    }
+
+    @Test
     void amountClaimedIsTheFullAmountWhenNothingWasPaidFirst() {
         DraftValue claimed = ClaimValueAssembler.amountClaimed(
                 new DraftValue("120.00", SourceType.RECEIPT, RECEIPT, "r", 1, "q", true), DraftValue.missing());
@@ -68,7 +89,7 @@ class ClaimValueAssemblerTest {
     private static Profile profile() {
         Profile profile = new Profile(1L);
         profile.update(new ProfileDto("Fiona Tremblay", LocalDate.of(1991, 4, 17), "4820 rue Fabre", "Montreal", "QC",
-                "H2J 3W1", null, null, null, null, null, null));
+                "H2J 3W1", null, null, null));
         return profile;
     }
 }

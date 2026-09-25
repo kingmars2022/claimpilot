@@ -14,18 +14,14 @@ public record ProfileDto(
         @Size(max = 20) String postalCode,
         @Size(max = 40) String phone,
         @Size(max = 150) String spouseName,
-        @Past LocalDate spouseDateOfBirth,
-        Custody custody,
-        @Size(max = 150) String otherParentName,
-        @Past LocalDate otherParentDateOfBirth) {
+        @Past LocalDate spouseDateOfBirth) {
 
     public static ProfileDto from(Profile p) {
         return new ProfileDto(p.getFullName(), p.getDateOfBirth(), p.getStreet(), p.getCity(), p.getProvince(),
-                p.getPostalCode(), p.getPhone(), p.getSpouseName(), p.getSpouseDateOfBirth(), p.getCustody(), p.getOtherParentName(),
-                p.getOtherParentDateOfBirth());
+                p.getPostalCode(), p.getPhone(), p.getSpouseName(), p.getSpouseDateOfBirth());
     }
 
     public static ProfileDto empty() {
-        return new ProfileDto(null, null, null, null, null, null, null, null, null, Custody.TOGETHER, null, null);
+        return new ProfileDto(null, null, null, null, null, null, null, null, null);
     }
 }

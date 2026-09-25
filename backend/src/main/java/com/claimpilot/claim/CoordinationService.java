@@ -11,24 +11,61 @@ import com.claimpilot.document.DocumentResponse;
 import com.claimpilot.document.DocumentService;
 import com.claimpilot.document.DocumentStatus;
 import com.claimpilot.extraction.FactKey;
+import com.claimpilot.common.NotFoundException;
 import com.claimpilot.user.AppUser;
+import com.claimpilot.user.Child;
+import com.claimpilot.user.ChildRepository;
+import com.claimpilot.user.Custody;
 import com.claimpilot.user.Profile;
 import com.claimpilot.user.ProfileRepository;
 
-/** Applies {@link CoordinationOfBenefits} to the member's ready policies and profile. */
+/** Applies {@link CoordinationOfBenefits} to the member's ready policies, profile and children. */
 @Service
 public class CoordinationService {
 
     private final DocumentService documents;
     private final ProfileRepository profiles;
+    private final ChildRepository children;
 
-    public CoordinationService(DocumentService documents, ProfileRepository profiles) {
+    public CoordinationService(DocumentService documents, ProfileRepository profiles, ChildRepository children) {
         this.documents = documents;
         this.profiles = profiles;
+        this.children = children;
     }
 
-    public CoordinationOfBenefits.Decision decide(AppUser user, CoordinationOfBenefits.Patient patient) {
-        return CoordinationOfBenefits.decide(patient, plans(user), household(user));
+    /**
+     * @param childId for a child, which one (custody is per child); may be null when the member has
+     *                one child, or when all their children have the same arrangement
+     */
+    public CoordinationOfBenefits.Decision decide(AppUser user, CoordinationOfBenefits.Patient patient, Long childId) {
+        Optional<Child> child = Optional.empty();
+        if (patient == CoordinationOfBenefits.Patient.CHILD) {
+            ChildChoice choice = child(user, childId);
+            if (choice.ambiguous()) {
+                return CoordinationOfBenefits.Decision.undecided("Your children have different custody arrangements. "
+                        + "Choose which child the claim is for.");
+            }
+            child = choice.child();
+        }
+        return CoordinationOfBenefits.decide(patient, plans(user), household(user, child));
+    }
+
+    /** The child a claim is for, or none; ambiguous when several children differ in custody. */
+    record ChildChoice(Optional<Child> child, boolean ambiguous) {
+    }
+
+    ChildChoice child(AppUser user, Long childId) {
+        if (childId != null) {
+            return new ChildChoice(Optional.of(children.findByIdAndUserId(childId, user.getId())
+                    .orElseThrow(() -> new NotFoundException("Child " + childId + " does not exist."))), false);
+        }
+        List<Child> all = children.findByUserIdOrderById(user.getId());
+        if (all.isEmpty()) {
+            return new ChildChoice(Optional.empty(), false);
+        }
+        boolean same = all.stream().map(c -> c.getCustody() + "|" + c.getOtherParentName() + "|"
+                + c.getOtherParentDateOfBirth()).distinct().count() == 1;
+        return same ? new ChildChoice(Optional.of(all.getFirst()), false) : new ChildChoice(Optional.empty(), true);
     }
 
     /**
@@ -36,9 +73,18 @@ public class CoordinationService {
      * than the one that pays second (the one that pays first, or a third one). Empty when the choice
      * is right or cannot be checked.
      */
-    public Optional<CoordinationOfBenefits.Decision> conflictWith(AppUser user, UUID claimOn, Relationship relationship) {
+    public Optional<CoordinationOfBenefits.Decision> conflictWith(AppUser user, UUID claimOn, Relationship relationship,
+                                                                  Long childId) {
         List<CoordinationOfBenefits.Plan> plans = plans(user);
-        CoordinationOfBenefits.Household household = household(user);
+        Optional<Child> child = Optional.empty();
+        if (relationship == Relationship.CHILD) {
+            ChildChoice choice = child(user, childId);
+            if (choice.ambiguous()) {
+                return Optional.empty();
+            }
+            child = choice.child();
+        }
+        CoordinationOfBenefits.Household household = household(user, child);
         CoordinationOfBenefits.Plan target = plans.stream().filter(p -> p.policyId().equals(claimOn)).findFirst()
                 .orElse(null);
         if (target == null || relationship == null) {
@@ -78,14 +124,14 @@ public class CoordinationService {
                 .toList();
     }
 
-    private CoordinationOfBenefits.Household household(AppUser user) {
+    private CoordinationOfBenefits.Household household(AppUser user, Optional<Child> child) {
         Profile profile = profiles.findById(user.getId()).orElse(null);
-        return profile == null
-                ? new CoordinationOfBenefits.Household(user.getDisplayName(), null, null, null)
-                : new CoordinationOfBenefits.Household(
-                        profile.getFullName() == null ? user.getDisplayName() : profile.getFullName(),
-                        profile.getDateOfBirth(), profile.getSpouseName(), profile.getSpouseDateOfBirth(),
-                        profile.getCustody(), profile.getOtherParentName(), profile.getOtherParentDateOfBirth());
+        String myName = profile == null || profile.getFullName() == null ? user.getDisplayName() : profile.getFullName();
+        return new CoordinationOfBenefits.Household(myName, profile == null ? null : profile.getDateOfBirth(),
+                profile == null ? null : profile.getSpouseName(), profile == null ? null : profile.getSpouseDateOfBirth(),
+                child.map(Child::getCustody).orElse(Custody.TOGETHER),
+                child.map(Child::getOtherParentName).orElse(null),
+                child.map(Child::getOtherParentDateOfBirth).orElse(null));
     }
 
     private static String label(DocumentResponse d) {
