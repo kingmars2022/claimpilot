@@ -33,7 +33,8 @@ public class PromptBuilder {
                 Start your reply with exactly one status line:
                 STATUS: ANSWERED       when the excerpts clearly answer the question, including when a stated rule or threshold only has to be applied (a $900 plan is over a $500 limit)
                 STATUS: UNCLEAR        when relevant excerpts exist but leave the outcome open: "may be considered", "at the insurer's discretion", conditions the question does not settle, or missing details
-                STATUS: NOT_IN_POLICY  when the excerpts do not address the question; write nothing after this line
+                STATUS: NOT_IN_POLICY  when no excerpt names the item or its category, neither as a benefit nor as an exclusion; write nothing after this line
+                An item that is simply not listed is NOT_IN_POLICY, not UNCLEAR. An item that falls under an exclusion ("cosmetic procedures") is ANSWERED: it is not covered.
 
                 Rules for the rest of the reply:
                 1. Use ONLY facts from the numbered excerpts. Never add outside knowledge about insurance.
