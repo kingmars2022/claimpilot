@@ -141,9 +141,9 @@ These screenshots come from a local run with the fictional sample documents: Fio
 
 1. The question is embedded (bge-m3) and searched in pgvector, **filtered to this user and this
    policy**. Because bge-m3 is multilingual, an English question finds the French clause. A keyword
-   search (Postgres word stems ranked with BM25) runs next to it and finds exact terms such as
-   "crown"; the two lists are merged by rank, and a "is X covered?" question always sees the
-   policy's exclusions.
+   search (Postgres word stems, stored and GIN-indexed, ranked with BM25) runs next to it and finds
+   exact terms such as "crown"; the two lists are merged by rank, and a "is X covered?" question
+   always sees the policy's exclusions section. The claim guide uses the same search.
 2. The best clauses go to the model with their page numbers, and it must reply with a status:
    answered, unclear or not in the policy.
 3. *How much does my plan pay for physiotherapy?* is answered in English from the French text and

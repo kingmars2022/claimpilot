@@ -1,31 +1,26 @@
 package com.claimpilot.claim;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.ai.document.Document;
-import org.springframework.ai.vectorstore.SearchRequest;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
 
 import com.claimpilot.cache.CachedModel;
-import com.claimpilot.config.AppProperties;
 import com.claimpilot.document.DocumentKind;
 import com.claimpilot.document.DocumentService;
 import com.claimpilot.document.DocumentStatus;
-import com.claimpilot.document.OwnerScope;
 import com.claimpilot.document.ProcessingService;
 import com.claimpilot.document.UploadedDocument;
+import com.claimpilot.search.HybridSearch;
 import com.claimpilot.extraction.JsonReply;
 import com.claimpilot.user.AppUser;
 
 /**
- * Builds the claim guide: searches the policy for deadlines, required documents, submission
+ * Builds the claim guide: searches the policy (vector and keyword search) for deadlines, required documents, submission
  * channels, coverage and pre-approval rules, then asks the model to turn those clauses into a
  * checklist in which every item names its clause.
  */
@@ -41,16 +36,13 @@ public class ClaimGuideService {
      * model reply is reused from the cache (in memory, or Redis). Ownership is checked first.
      */
     private final CachedModel model;
-    private final VectorStore vectorStore;
+    private final HybridSearch search;
     private final DocumentService documents;
-    private final double similarityThreshold;
 
-    public ClaimGuideService(CachedModel model, VectorStore vectorStore, DocumentService documents,
-                             AppProperties properties) {
+    public ClaimGuideService(CachedModel model, HybridSearch search, DocumentService documents) {
         this.model = model;
-        this.vectorStore = vectorStore;
+        this.search = search;
         this.documents = documents;
-        this.similarityThreshold = properties.retrieval().similarityThreshold();
     }
 
     public ClaimGuide guide(AppUser user, UUID policyId, ClaimType type) {
@@ -72,20 +64,9 @@ public class ClaimGuideService {
     }
 
     private List<Document> findClauses(AppUser user, UUID policyId, ClaimType type) {
-        Map<String, Document> unique = new LinkedHashMap<>();
         List<String> queries = new ArrayList<>(ClaimType.COMMON_QUERIES);
         queries.addAll(type.queries());
-        for (String query : queries) {
-            for (Document doc : vectorStore.similaritySearch(SearchRequest.builder()
-                    .query(query)
-                    .topK(PER_QUERY)
-                    .similarityThreshold(similarityThreshold)
-                    .filterExpression(OwnerScope.policy(user.getId(), policyId))
-                    .build())) {
-                unique.putIfAbsent(doc.getId(), doc);
-            }
-        }
-        return unique.values().stream().limit(MAX_CLAUSES).toList();
+        return search.search(queries, user.getId(), policyId, PER_QUERY, MAX_CLAUSES);
     }
 
     static String systemPrompt() {

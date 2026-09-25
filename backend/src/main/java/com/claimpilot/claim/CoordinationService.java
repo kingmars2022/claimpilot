@@ -32,8 +32,9 @@ public class CoordinationService {
     }
 
     /**
-     * For a claim about to be made: the decision, when the member is claiming on the plan that should
-     * pay first. Empty when the choice is right or cannot be checked.
+     * For a balance claim about to be made: the decision, when the member is claiming on a plan other
+     * than the one that pays second (the one that pays first, or a third one). Empty when the choice
+     * is right or cannot be checked.
      */
     public Optional<CoordinationOfBenefits.Decision> conflictWith(AppUser user, UUID claimOn, Relationship relationship) {
         List<CoordinationOfBenefits.Plan> plans = plans(user);
@@ -58,11 +59,15 @@ public class CoordinationService {
         if (!decision.decided()) {
             return Optional.empty();
         }
-        // Compared by whose plan it is, so a second copy of the same policy counts as that plan.
-        CoordinationOfBenefits.Holder firstHolder = plans.stream()
-                .filter(p -> p.policyId().equals(decision.firstPolicyId())).findFirst()
-                .map(p -> CoordinationOfBenefits.holder(p, household)).orElse(null);
-        return holder == firstHolder ? Optional.of(decision) : Optional.empty();
+        // Compared by whose plan it is, so a second copy of the same policy counts as that plan. A
+        // balance belongs on the plan that pays second: claiming it on the first, or skipping to a
+        // third, is out of order.
+        List<CoordinationOfBenefits.Holder> order = decision.order().stream()
+                .map(id -> plans.stream().filter(p -> p.policyId().equals(id)).findFirst()
+                        .map(p -> CoordinationOfBenefits.holder(p, household)).orElse(null))
+                .toList();
+        int position = order.indexOf(holder);
+        return position >= 0 && position != 1 ? Optional.of(decision) : Optional.empty();
     }
 
     private List<CoordinationOfBenefits.Plan> plans(AppUser user) {

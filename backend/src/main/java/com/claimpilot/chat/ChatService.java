@@ -1,17 +1,11 @@
 package com.claimpilot.chat;
 
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.ai.document.Document;
-import org.springframework.ai.vectorstore.SearchRequest;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 
 import com.claimpilot.cache.CachedModel;
@@ -22,9 +16,9 @@ import com.claimpilot.conversation.ConversationService;
 import com.claimpilot.document.DocumentKind;
 import com.claimpilot.document.DocumentService;
 import com.claimpilot.document.DocumentStatus;
-import com.claimpilot.document.OwnerScope;
 import com.claimpilot.document.ProcessingService;
 import com.claimpilot.document.UploadedDocument;
+import com.claimpilot.search.HybridSearch;
 import com.claimpilot.user.AppUser;
 
 /**
@@ -38,11 +32,9 @@ public class ChatService {
     private static final int SNIPPET_LENGTH = 320;
     private static final int UNCLEAR_CLAUSES = 3;
     private static final int EXCLUSION_CLAUSES = 2;
-    private static final int RRF_K = 60;
 
     private final CachedModel model;
-    private final VectorStore vectorStore;
-    private final KeywordSearch keywords;
+    private final HybridSearch search;
     private final PromptBuilder promptBuilder;
     private final ConversationService conversations;
     private final DocumentService documents;
@@ -50,12 +42,11 @@ public class ChatService {
     private final AppProperties.Retrieval retrieval;
     private final int historyTurns;
 
-    public ChatService(CachedModel model, VectorStore vectorStore, KeywordSearch keywords, PromptBuilder promptBuilder,
+    public ChatService(CachedModel model, HybridSearch search, PromptBuilder promptBuilder,
                        ConversationService conversations, DocumentService documents, CallKitBuilder callKits,
                        AppProperties properties) {
         this.model = model;
-        this.vectorStore = vectorStore;
-        this.keywords = keywords;
+        this.search = search;
         this.promptBuilder = promptBuilder;
         this.conversations = conversations;
         this.documents = documents;
@@ -136,60 +127,21 @@ public class ChatService {
     }
 
     /**
-     * Finds the clauses for a question, only in this user's chosen policy. Two searches run side by
-     * side: vector search (meaning) and keyword search (exact terms). A follow-up is also searched
-     * together with the previous question. The lists are merged by rank, and a coverage question
-     * always sees the policy's exclusions.
+     * Finds the clauses for a question, only in this user's chosen policy, with vector and keyword
+     * search. A follow-up is also searched together with the previous question. A coverage
+     * question always sees the policy's exclusions.
      */
     private List<Document> retrieve(String question, List<ChatMessage> history, AppUser user, UUID policyId) {
-        List<List<Document>> lists = new ArrayList<>();
-        lists.add(vectorStore.similaritySearch(searchRequest(question, user, policyId)));
         String contextual = PromptBuilder.contextualQuery(history, question);
-        if (!contextual.equals(question)) {
-            lists.add(vectorStore.similaritySearch(searchRequest(contextual, user, policyId)));
-        }
-        lists.add(keywords.search(question, user.getId(), policyId, retrieval.topK()));
-        List<Document> fused = new ArrayList<>(fuse(lists, retrieval.topK()));
-        for (Document exclusion : keywords.exclusions(question, user.getId(), policyId, EXCLUSION_CLAUSES)) {
-            if (fused.stream().noneMatch(d -> d.getId().equals(exclusion.getId()))) {
-                fused.add(exclusion);
+        List<String> queries = contextual.equals(question) ? List.of(question) : List.of(question, contextual);
+        List<Document> found = new ArrayList<>(
+                search.search(queries, user.getId(), policyId, retrieval.topK(), retrieval.topK()));
+        for (Document exclusion : search.exclusions(question, user.getId(), policyId, EXCLUSION_CLAUSES)) {
+            if (found.stream().noneMatch(d -> d.getId().equals(exclusion.getId()))) {
+                found.add(exclusion);
             }
         }
-        return fused;
-    }
-
-    private SearchRequest searchRequest(String query, AppUser user, UUID policyId) {
-        return SearchRequest.builder()
-                .query(query)
-                .topK(retrieval.topK())
-                .similarityThreshold(retrieval.similarityThreshold())
-                .filterExpression(OwnerScope.policy(user.getId(), policyId))
-                .build();
-    }
-
-    /**
-     * Reciprocal rank fusion: each chunk scores 1/(60 + rank) in every list it appears in, so a
-     * chunk found by both searches comes first. Keeps each chunk once, with its best similarity
-     * score for display, at most {@code limit}.
-     */
-    static List<Document> fuse(List<List<Document>> lists, int limit) {
-        Map<String, Double> fusedScore = new HashMap<>();
-        Map<String, Document> byId = new LinkedHashMap<>();
-        for (List<Document> list : lists) {
-            for (int rank = 0; rank < list.size(); rank++) {
-                Document doc = list.get(rank);
-                fusedScore.merge(doc.getId(), 1.0 / (RRF_K + rank + 1), Double::sum);
-                byId.merge(doc.getId(), doc, (a, b) -> score(b) > score(a) ? b : a);
-            }
-        }
-        return byId.values().stream()
-                .sorted(Comparator.comparingDouble((Document d) -> fusedScore.get(d.getId())).reversed())
-                .limit(limit)
-                .toList();
-    }
-
-    private static double score(Document doc) {
-        return doc.getScore() == null ? 0 : doc.getScore();
+        return found;
     }
 
     /** Returns only the excerpts the model actually cited, keeping the model's numbering. */

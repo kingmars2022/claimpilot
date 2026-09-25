@@ -1,4 +1,4 @@
-package com.claimpilot.chat;
+package com.claimpilot.search;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
