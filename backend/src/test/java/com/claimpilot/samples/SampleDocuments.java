@@ -57,8 +57,18 @@ public final class SampleDocuments {
     public static final String SPOUSE_POLICY_SCANNED = "cedarview-policy-marc-gagnon-scanned.pdf";
     public static final String RECEIPT_SCANNED = "physio-receipt-2026-03-05-scanned.pdf";
 
-    private static final PDType1Font REGULAR = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
-    private static final PDType1Font BOLD = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+    /**
+     * The fonts of the document being built. Each document gets its own: PDFBox keeps state on a
+     * font object (its object number, glyph data after rendering), so sharing one would make a
+     * document depend on what was generated before it.
+     */
+    private static PDType1Font REGULAR;
+    private static PDType1Font BOLD;
+
+    private static void newFonts() {
+        REGULAR = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+        BOLD = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+    }
     private static final float MARGIN = 60;
 
     private SampleDocuments() {
@@ -246,6 +256,7 @@ public final class SampleDocuments {
 
     public static byte[] receiptPdf() {
         try (PDDocument pdf = new PDDocument()) {
+            newFonts();
             PDPage page = new PDPage(new PDRectangle(420, 560));
             pdf.addPage(page);
             try (PDPageContentStream out = new PDPageContentStream(pdf, page)) {
@@ -509,6 +520,7 @@ public final class SampleDocuments {
      */
     private static byte[] fillableForm(List<String> header, List<FormLine> lines) {
         try (PDDocument pdf = new PDDocument()) {
+            newFonts();
             PDPage page = new PDPage(PDRectangle.LETTER);
             pdf.addPage(page);
             PDAcroForm form = new PDAcroForm(pdf);
@@ -633,32 +645,33 @@ public final class SampleDocuments {
 
     // ---------------------------------------------------------------- text layout
 
-    private record Para(PDType1Font font, float size, String text, float before) {
+    private record Para(boolean bold, float size, String text, float before) {
     }
 
     private static Para h(String text) {
-        return new Para(BOLD, 16, text, 0);
+        return new Para(true, 16, text, 0);
     }
 
     private static Para h2(String text) {
-        return new Para(BOLD, 12, text, 6);
+        return new Para(true, 12, text, 6);
     }
 
     private static Para p(String text) {
-        return new Para(REGULAR, 10.5f, text, 3);
+        return new Para(false, 10.5f, text, 3);
     }
 
     private static Para note(String text) {
-        return new Para(REGULAR, 8.5f, text, 2);
+        return new Para(false, 8.5f, text, 2);
     }
 
     private static Para gap() {
-        return new Para(REGULAR, 10, "", 6);
+        return new Para(false, 10, "", 6);
     }
 
     /** One list of paragraphs per page, wrapped to the page width. */
     private static byte[] textPdf(List<List<Para>> pages) {
         try (PDDocument pdf = new PDDocument()) {
+            newFonts();
             for (List<Para> paragraphs : pages) {
                 PDPage page = new PDPage(PDRectangle.LETTER);
                 pdf.addPage(page);
@@ -667,8 +680,8 @@ public final class SampleDocuments {
                     float width = PDRectangle.LETTER.getWidth() - 2 * MARGIN;
                     for (Para para : paragraphs) {
                         y -= para.before();
-                        for (String wrapped : wrap(para.text(), para.font(), para.size(), width)) {
-                            y = line(out, para.font(), para.size(), MARGIN, y, wrapped);
+                        for (String wrapped : wrap(para.text(), (para.bold() ? BOLD : REGULAR), para.size(), width)) {
+                            y = line(out, (para.bold() ? BOLD : REGULAR), para.size(), MARGIN, y, wrapped);
                         }
                     }
                     text(out, REGULAR, 8, MARGIN, 40, "Page " + (pdf.getPages().indexOf(page) + 1));
@@ -718,7 +731,16 @@ public final class SampleDocuments {
         out.endText();
     }
 
+    /**
+     * Saves with a fixed document ID (PDFBox would otherwise derive one from the time), so the same
+     * sample is byte-for-byte the same every time: a form's SHA-256 identifies its version.
+     */
     private static byte[] save(PDDocument pdf) throws IOException {
+        org.apache.pdfbox.cos.COSArray id = new org.apache.pdfbox.cos.COSArray();
+        byte[] fixed = "ClaimPilot sample".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        id.add(new org.apache.pdfbox.cos.COSString(fixed));
+        id.add(new org.apache.pdfbox.cos.COSString(fixed));
+        pdf.getDocument().getTrailer().setItem(COSName.ID, id);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         pdf.save(out);
         return out.toByteArray();
