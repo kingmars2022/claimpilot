@@ -90,9 +90,22 @@ public class ChatService {
                 // An answer that cites nothing is not grounded: treat it as unclear and show the clauses.
                 status = AnswerStatus.UNCLEAR;
             }
+            boolean discretionary = false;
             if (status == AnswerStatus.ANSWERED && DiscretionaryWording.decides(answer, citedTexts(answer, sources))) {
                 // The clause leaves it to the insurer ("may be considered"): not a yes.
                 status = AnswerStatus.UNCLEAR;
+                discretionary = true;
+            }
+            if (status == AnswerStatus.UNCLEAR && !discretionary) {
+                // Two cases the model calls unclear that code can settle exactly.
+                var threshold = ThresholdRule.find(question, sources);
+                if (threshold.isPresent()) {
+                    status = AnswerStatus.ANSWERED;
+                    answer = threshold.get().answer(language);
+                    citations = citationsUsed(answer, sources);
+                } else if (UnmentionedItem.applies(question, language, sources)) {
+                    status = AnswerStatus.NOT_IN_POLICY;
+                }
             }
             if (status == AnswerStatus.NOT_IN_POLICY || answer.isBlank()) {
                 status = AnswerStatus.NOT_IN_POLICY;

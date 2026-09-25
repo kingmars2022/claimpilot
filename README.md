@@ -200,7 +200,10 @@ Shown at the top of this page. When the claim is started:
 - **Hard rules in code, not in the prompt.** Signature, declaration and consent fields are forced to
   stay blank even if the model maps them to a value (a test checks exactly that). An "answered"
   reply that cites nothing is downgraded to "unclear", and so is one that rests on a discretionary
-  clause ("may be considered", "at the insurer's discretion"). Guide items without a valid clause
+  clause ("may be considered", "at the insurer's discretion"). Two "unclear" replies are settled by
+  code: a question with an amount against a clause with a threshold ("a $900 plan", "over $500") is
+  answered by comparing the numbers, and a coverage question about an item no clause names
+  ("acupuncture") is "not in the policy". Guide items without a valid clause
   are dropped.
 - **Data isolation.** Every chunk in pgvector carries its owner's id, and every search is filtered
   by the signed-in user and the chosen policy, so another person's policy text never reaches the model.
