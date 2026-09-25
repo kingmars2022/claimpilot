@@ -91,6 +91,7 @@ public class ChatService {
                 status = AnswerStatus.UNCLEAR;
             }
             boolean discretionary = false;
+            boolean unmentioned = false;
             if (status == AnswerStatus.ANSWERED && DiscretionaryWording.decides(answer, citedTexts(answer, sources))) {
                 // The clause leaves it to the insurer ("may be considered"): not a yes.
                 status = AnswerStatus.UNCLEAR;
@@ -103,11 +104,18 @@ public class ChatService {
                     status = AnswerStatus.ANSWERED;
                     answer = threshold.get().answer(language);
                     citations = citationsUsed(answer, sources);
-                } else if (UnmentionedItem.applies(question, language, sources)) {
-                    status = AnswerStatus.NOT_IN_POLICY;
+                } else {
+                    var item = UnmentionedItem.item(question, language, sources);
+                    if (item.isPresent()) {
+                        status = AnswerStatus.NOT_IN_POLICY;
+                        answer = UnmentionedItem.answer(item.get());
+                        citations = asCitations(sources.subList(0, Math.min(UNCLEAR_CLAUSES, sources.size())));
+                        unmentioned = true;
+                    }
                 }
             }
-            if (status == AnswerStatus.NOT_IN_POLICY || answer.isBlank()) {
+            // An item no clause names keeps its own message and the closest clauses.
+            if (!unmentioned && (status == AnswerStatus.NOT_IN_POLICY || answer.isBlank())) {
                 status = AnswerStatus.NOT_IN_POLICY;
                 answer = language.notInPolicyMessage();
                 citations = List.of();

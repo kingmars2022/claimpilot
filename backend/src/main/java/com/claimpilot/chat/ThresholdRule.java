@@ -15,7 +15,9 @@ import org.springframework.ai.document.Document;
  * "Do I need a predetermination for a $900 plan?" against "for any treatment plan over $500": the
  * answer is a comparison of two numbers, which code does exactly. When the model calls such a
  * question unclear, and the question holds one amount and a clause on the same subject sets a
- * threshold for it, the answer is given by code from that clause.
+ * threshold for it, the answer is given by code from that clause. "The same subject" is strict: every
+ * word of the question that the retrieved clauses use must be in that clause, so a $900 massage is
+ * never measured against the dental rule.
  */
 final class ThresholdRule {
 
@@ -78,9 +80,14 @@ final class ThresholdRule {
             return Optional.empty();
         }
         Set<String> questionWords = words(question);
+        // The words of the question that the policy uses somewhere ("massage", "dental"): the clause
+        // setting the threshold must be about all of them, not just share one.
+        Set<String> subject = new java.util.HashSet<>(questionWords);
+        subject.retainAll(words(String.join(" ", sources.stream().map(d -> d.getText() == null ? "" : d.getText())
+                .toList())));
         for (int i = 0; i < sources.size(); i++) {
             String text = sources.get(i).getText();
-            if (text == null) {
+            if (text == null || !words(text).containsAll(subject)) {
                 continue;
             }
             for (String sentence : SENTENCE_END.split(text.replaceAll("\\s+", " "))) {

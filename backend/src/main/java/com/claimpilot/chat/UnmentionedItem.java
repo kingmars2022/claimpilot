@@ -37,20 +37,35 @@ final class UnmentionedItem {
     }
 
     static boolean applies(String question, AnswerLanguage language, List<Document> sources) {
+        return item(question, language, sources).isPresent();
+    }
+
+    /**
+     * The item no clause names ("acupuncture"), or empty when the rule does not apply. The member
+     * still sees the closest clauses, in case the policy calls the item by another name.
+     */
+    static java.util.Optional<String> item(String question, AnswerLanguage language, List<Document> sources) {
         if (language != AnswerLanguage.ENGLISH || !COVERAGE_QUESTION.matcher(question).find()) {
-            return false;
+            return java.util.Optional.empty();
         }
         List<String> items = WORD.matcher(question.toLowerCase(Locale.ROOT)).results()
                 .map(r -> r.group()).filter(w -> !NOT_THE_ITEM.contains(w)).toList();
         if (items.isEmpty()) {
-            return false;
+            return java.util.Optional.empty();
         }
         String clauses = String.join(" ", sources.stream().map(Document::getText)
                 .map(t -> t == null ? "" : t).toList()).toLowerCase(Locale.ROOT);
         if (EXCLUSION.matcher(clauses).find()) {
-            return false;
+            return java.util.Optional.empty();
         }
         // Compared by the first five letters, so "acupuncturist" still names "acupuncture".
-        return items.stream().noneMatch(item -> clauses.contains(item.substring(0, Math.min(5, item.length()))));
+        boolean named = items.stream().anyMatch(item -> clauses.contains(item.substring(0, Math.min(5, item.length()))));
+        return named ? java.util.Optional.empty() : java.util.Optional.of(String.join(" ", items));
+    }
+
+    static String answer(String item) {
+        return "No clause found in your policy mentions \"" + item + "\", so the policy does not say whether it "
+                + "is covered. The closest clauses are listed in case your policy calls it by another name; "
+                + "otherwise, the call kit has what you need to ask your insurer.";
     }
 }

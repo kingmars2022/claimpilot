@@ -49,6 +49,11 @@ class ThresholdRuleTest {
         assertThat(ThresholdRule.find("Do I need a predetermination for a $900 plan?",
                 List.of(doc("A predetermination may be considered for a plan over $500.")))).isEmpty();
         assertThat(ThresholdRule.find("Do I need a predetermination?", CEDARVIEW)).as("no amount").isEmpty();
+        List<Document> withMassage = List.of(
+                doc("Massage therapist: up to $400 per calendar year per person. A physician's referral is required."),
+                CEDARVIEW.get(1));
+        assertThat(ThresholdRule.find("Do I need a predetermination for a $900 massage therapy plan?", withMassage))
+                .as("the dental rule is not about massage").isEmpty();
     }
 
     private static Document doc(String text) {

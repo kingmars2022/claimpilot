@@ -17,8 +17,9 @@ class UnmentionedItemTest {
     @Test
     void anItemNoClauseNamesIsNotInThePolicy() {
         assertThat(UnmentionedItem.applies("Is acupuncture covered?", AnswerLanguage.ENGLISH, PARAMEDICAL)).isTrue();
-        assertThat(UnmentionedItem.applies("Are acupuncture treatments for my son covered?", AnswerLanguage.ENGLISH,
-                PARAMEDICAL)).isTrue();
+        assertThat(UnmentionedItem.item("Are acupuncture treatments for my son covered?", AnswerLanguage.ENGLISH,
+                PARAMEDICAL)).contains("acupuncture");
+        assertThat(UnmentionedItem.answer("acupuncture")).contains("\"acupuncture\"").contains("another name");
     }
 
     @Test
