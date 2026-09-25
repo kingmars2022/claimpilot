@@ -45,7 +45,7 @@ what the plan pays, and whether approval or a referral is needed first. Every it
 clause it came from; items the model cannot tie to a clause are dropped.
 
 ### 3. Pre-filled claim form
-Fill one of five built-in forms, or **upload your insurer's own fillable PDF**: its fields are read and
+Fill one of six built-in forms, or **upload your insurer's own fillable PDF**: its fields are read and
 matched by their labels, whatever the language or field names. The built-in forms ship with a reviewed
 field mapping, so they need no model call at all:
 
@@ -56,16 +56,19 @@ field mapping, so they need no model call at all:
 | Northgate Life: Health and Dental Claim | English | dental procedure code and tooth, phone |
 | Prairie Shield Insurance: Prescription Drug Claim | English | Rx number, DIN, mailing address |
 | Assurance Boréale: Réclamation soins de la vue | French | eye prescription |
+| Claim details sheet (any insurer) | English | |
 
 All five insurers are fictional: real insurers' forms are copyrighted, so the public repository does not
-ship them. Upload yours instead; signature, declaration and date signed are left blank on every form. For a second-plan ("supplementary") health claim:
+ship them. Upload yours instead. When your insurer's form is a scan or print-only, fill the **claim
+details sheet**: every detail the claim needs, to attach to their paper form or copy from. Signature,
+declaration and date signed are left blank on every form. For a second-plan ("supplementary") health claim:
 
 | Form section | Filled from |
 |---|---|
 | Plan member, policy and certificate numbers, employer | The plan being claimed on (the spouse's policy) |
 | Other plan: insurer, policy and certificate numbers | The plan that paid first (your own policy) |
 | Provider, date, service, receipt number, amount charged, amount paid by the other plan | The receipt (PDF or photo) |
-| Patient name, date of birth, address, phone | Your profile |
+| Patient name, date of birth, address, phone | Your profile (for a child: the child's name and birth date) |
 | Relationship to the plan member | Chosen when you start the claim |
 | Amount claimed | Calculated: charged minus paid by the other plan |
 | Signature, declaration, date signed, bank details | **Never filled.** Left for you |
@@ -78,7 +81,8 @@ checked, and it stays editable. Claim types: paramedical care, dental, prescript
 With two plans in the family, ClaimPilot decides the order itself, in code, following the Canadian
 (CLHIA) coordination of benefits guidelines: the patient's own plan pays first and the plan where they
 are a dependent pays second; for a child, the plan of the parent whose birthday comes first in the year.
-For a child of **separated or divorced parents**, custody decides instead (set in the profile):
+For a child of **separated or divorced parents**, custody decides instead. Custody is set **per child** in
+the profile, so children from two relationships each get their own order:
 
 | Custody | Order the plans pay in |
 |---|---|
@@ -142,8 +146,9 @@ These screenshots come from a local run with the fictional sample documents: Fio
 1. The question is embedded (bge-m3) and searched in pgvector, **filtered to this user and this
    policy**. Because bge-m3 is multilingual, an English question finds the French clause. A keyword
    search (Postgres word stems, stored and GIN-indexed, ranked with BM25) runs next to it and finds
-   exact terms such as "crown"; the two lists are merged by rank, and a "is X covered?" question
-   always sees the policy's exclusions section. The claim guide uses the same search.
+   exact terms such as "crown", with English or French stemming depending on the question; the two lists
+   are merged by rank, and a "is X covered?" question always sees the policy's exclusions section. The
+   claim guide uses the same search.
 2. The best clauses go to the model with their page numbers, and it must reply with a status:
    answered, unclear or not in the policy.
 3. *How much does my plan pay for physiotherapy?* is answered in English from the French text and
@@ -383,7 +388,7 @@ cd backend
 
 ### Accuracy evaluation
 
-`backend/src/test/resources/eval/cases.json` holds 29 questions (English, French, Chinese; answered,
+`backend/src/test/resources/eval/cases.json` holds 41 questions (English, French, Chinese; answered,
 unclear and not-in-policy cases) and 18 facts to extract from four fictional documents, including a
 five-page booklet laid out like real ones (definitions, a coverage table, dental waiting periods,
 exclusions). To measure ClaimPilot on **your own real policies** without committing them, add them
@@ -400,14 +405,18 @@ expected content, facts extracted, average answer time. It is not part of the no
 **Accuracy evaluation** workflow runs it on GitHub Actions (Ollama on the runner's CPU) weekly and on
 demand.
 
-Latest result (qwen3:8b, bge-m3, CPU runner, 29 questions on four documents):
+Latest result (qwen3:8b, bge-m3, CPU runner, 41 questions on four documents):
 
-| Metric | First run | With hybrid search | Now (plus code rules) |
+| Metric | First run (29 questions) | With hybrid search (29) | Now, with the code rules (41) |
 |---|---|---|---|
-| Answer status (answered / unclear / not in policy) | 27 / 29 (93%) | 27 / 29 (93%) | **29 / 29 (100%)** |
-| Cited the expected page | 23 / 25 (92%) | 25 / 25 (100%) | **25 / 25 (100%)** |
-| Answer contains the expected facts | 27 / 29 (93%) | 29 / 29 (100%) | **29 / 29 (100%)** |
+| Answer status (answered / unclear / not in policy) | 27 / 29 (93%) | 27 / 29 (93%) | **41 / 41 (100%)** |
+| Cited the expected page | 23 / 25 (92%) | 25 / 25 (100%) | **35 / 35 (100%)** |
+| Answer contains the expected facts | 27 / 29 (93%) | 29 / 29 (100%) | **41 / 41 (100%)** |
 | Key facts extracted correctly | 18 / 18 (100%) | 18 / 18 (100%) | **18 / 18 (100%)** |
+
+The last 12 questions were added after the fixes and written before running them: an amount under a
+threshold, a second threshold, an unlisted item on a policy without exclusions, French plurals, an
+English question on the French policy, exclusions and waiting periods.
 
 How each miss was fixed, all without a larger model:
 - *When can I claim a crown after joining?* and *Is Botox for wrinkles covered?* were retrieval misses.
@@ -419,7 +428,7 @@ How each miss was fixed, all without a larger model:
   such an English coverage question "not in the policy" when no clause names the item and no exclusion
   clause was found.
 
-Answer times on the shared CPU runner vary between runs (21 to 49 s on average); on a laptop with a
+Answer times on the shared CPU runner vary between runs (21 to 49 s on average, 29 s on the last); on a laptop with a
 GPU they are a few seconds. The set is small and fictional, so 100% here is a regression check, not a
 claim about real policies: measure yours with `sample-docs/private/eval/`.
 
@@ -446,5 +455,6 @@ claim about real policies: measure yours with `sample-docs/private/eval/`.
 - [x] **Next**: evaluation on a booklet laid out like real ones and on the member's own private
   policies; S3 events through SQS (the AWS design, ElasticMQ locally); coordination-of-benefits rules
   that decide which plan pays first.
-- [x] **Later**: separated-parents (custody) rules; five insurers' claim forms out of the box (health and
-  dental, prescription drugs, vision) with reviewed mappings; keyword search alongside vector search.
+- [x] **Later**: separated-parents (custody) rules per child; five insurers' claim forms out of the box
+  (health and dental, prescription drugs, vision) with reviewed mappings, plus a claim details sheet for
+  any insurer; keyword search (English and French) alongside vector search; reproducible sample PDFs.
