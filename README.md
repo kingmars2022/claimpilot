@@ -372,18 +372,25 @@ expected content, facts extracted, average answer time. It is not part of the no
 **Accuracy evaluation** workflow runs it on GitHub Actions (Ollama on the runner's CPU) weekly and on
 demand.
 
-Latest result (qwen3:8b, bge-m3, CPU runner):
+Latest result (qwen3:8b, bge-m3, CPU runner, 29 questions on four documents):
 
 | Metric | Result |
 |---|---|
-| Answer status (answered / unclear / not in policy) | 16 / 17 (94%) |
-| Cited the expected page | 14 / 14 (100%) |
-| Answer contains the expected facts | 17 / 17 (100%) |
-| Key facts extracted correctly | 13 / 13 (100%) |
+| Answer status (answered / unclear / not in policy) | 27 / 29 (93%) |
+| Cited the expected page | 23 / 25 (92%) |
+| Answer contains the expected facts | 27 / 29 (93%) |
+| Key facts extracted correctly | 18 / 18 (100%) |
 
-The remaining miss: asked whether a $900 dental plan needs a predetermination (the policy requires one
-over $500), the model answers "unclear" instead of applying the threshold. It errs on the cautious
-side, and the answer still cites the right clause.
+What it still misses, and why:
+- *Do I need a predetermination for a $900 dental plan?* (the rule applies over $500): the model
+  answers "unclear" instead of applying the threshold. Cautious, and the right clause is cited.
+- *Is Botox for wrinkles covered?*: no clause is similar enough to the question for the search, so
+  the answer is "not in the policy", while the booklet excludes "cosmetic procedures".
+- *When can I claim a crown after joining?*: the search returns the claims and definitions pages
+  rather than the dental page with the 12-month waiting period.
+
+The last two are retrieval misses (the question's words are far from the policy's words), not model
+errors; keyword search alongside the vector search is the next improvement.
 
 ## Principles
 
