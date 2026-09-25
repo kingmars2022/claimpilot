@@ -250,6 +250,108 @@
       "mustContain": [
         "12"
       ]
+    },
+    {
+      "policy": "cedarview",
+      "question": "Do I need a predetermination for a $300 dental treatment plan?",
+      "status": "ANSWERED",
+      "page": 2,
+      "mustContain": [
+        "500"
+      ]
+    },
+    {
+      "policy": "cedarview",
+      "question": "Is naturopathy covered?",
+      "status": "NOT_IN_POLICY",
+      "mustContain": []
+    },
+    {
+      "policy": "cedarview",
+      "question": "Does the chiropractor maximum include X-rays?",
+      "status": "ANSWERED",
+      "page": 2,
+      "mustContain": [
+        "X-ray"
+      ]
+    },
+    {
+      "policy": "northgate",
+      "question": "Are dentures covered?",
+      "status": "ANSWERED",
+      "page": 4,
+      "mustContain": [
+        "50"
+      ]
+    },
+    {
+      "policy": "northgate",
+      "question": "Is orthodontic treatment covered?",
+      "status": "ANSWERED",
+      "page": 4,
+      "mustContain": [
+        "not"
+      ]
+    },
+    {
+      "policy": "northgate",
+      "question": "How often can I have an eye exam?",
+      "status": "ANSWERED",
+      "page": 3,
+      "mustContain": [
+        "24"
+      ]
+    },
+    {
+      "policy": "northgate",
+      "question": "Are services covered by the provincial health insurance plan reimbursed?",
+      "status": "ANSWERED",
+      "page": 5,
+      "mustContain": [
+        "provincial"
+      ]
+    },
+    {
+      "policy": "northgate",
+      "question": "Combien de temps ai-je pour soumettre une réclamation ?",
+      "status": "ANSWERED",
+      "page": 5,
+      "mustContain": [
+        "90"
+      ]
+    },
+    {
+      "policy": "northgate",
+      "question": "Is a $1,200 dental treatment plan subject to predetermination?",
+      "status": "ANSWERED",
+      "page": 4,
+      "mustContain": [
+        "1,000|1000|1 000"
+      ]
+    },
+    {
+      "policy": "harbourline",
+      "question": "How much does my plan pay for massage therapy?",
+      "status": "ANSWERED",
+      "page": 2,
+      "mustContain": [
+        "300"
+      ]
+    },
+    {
+      "policy": "harbourline",
+      "question": "Est-ce que les massothérapies sont remboursées ?",
+      "status": "ANSWERED",
+      "page": 2,
+      "mustContain": [
+        "300|70"
+      ]
+    },
+    {
+      "policy": "harbourline",
+      "question": "Is acupuncture covered by my plan?",
+      "status": "NOT_IN_POLICY",
+      "mustContain": []
     }
   ],
   "facts": [
