@@ -400,26 +400,28 @@ expected content, facts extracted, average answer time. It is not part of the no
 **Accuracy evaluation** workflow runs it on GitHub Actions (Ollama on the runner's CPU) weekly and on
 demand.
 
-Latest result (qwen3:8b, bge-m3, CPU runner, 29 questions on four documents, hybrid search):
+Latest result (qwen3:8b, bge-m3, CPU runner, 29 questions on four documents):
 
-| Metric | Before keyword search | Now |
-|---|---|---|
-| Answer status (answered / unclear / not in policy) | 27 / 29 (93%) | 27 / 29 (93%) |
-| Cited the expected page | 23 / 25 (92%) | **25 / 25 (100%)** |
-| Answer contains the expected facts | 27 / 29 (93%) | **29 / 29 (100%)** |
-| Key facts extracted correctly | 18 / 18 (100%) | 18 / 18 (100%) |
-| Average answer time | 44 s | 21 s |
+| Metric | First run | With hybrid search | Now (plus code rules) |
+|---|---|---|---|
+| Answer status (answered / unclear / not in policy) | 27 / 29 (93%) | 27 / 29 (93%) | **29 / 29 (100%)** |
+| Cited the expected page | 23 / 25 (92%) | 25 / 25 (100%) | **25 / 25 (100%)** |
+| Answer contains the expected facts | 27 / 29 (93%) | 29 / 29 (100%) | **29 / 29 (100%)** |
+| Key facts extracted correctly | 18 / 18 (100%) | 18 / 18 (100%) | **18 / 18 (100%)** |
 
-Keyword search fixed the two retrieval misses: *When can I claim a crown after joining?* now cites the
-dental page with the 12-month waiting period, and *Is Botox for wrinkles covered?* gets the exclusions
-page and is answered from "cosmetic procedures". What it still gets wrong is the answer status, not the
-facts:
-- *Do I need a predetermination for a $900 dental plan?* (the rule applies over $500): the model cites
-  the right clause but answers "unclear" instead of applying the threshold.
-- *Is acupuncture covered?*: the policy never mentions it, but the model answers "unclear" with the
-  paramedical clause rather than "not in the policy".
+How each miss was fixed, all without a larger model:
+- *When can I claim a crown after joining?* and *Is Botox for wrinkles covered?* were retrieval misses.
+  Keyword search finds the dental page with the 12-month waiting period, and a coverage question now
+  gets the exclusions page ("cosmetic procedures").
+- *Do I need a predetermination for a $900 dental plan?*: the model cited the "over $500" clause but
+  called it unclear. Code now compares the two amounts and answers from the clause.
+- *Is acupuncture covered?*: the model called it unclear although no clause names it. Code now makes
+  such an English coverage question "not in the policy" when no clause names the item and no exclusion
+  clause was found.
 
-Both are judgement calls of a small local model; a larger model (Bedrock, paid) is the next lever.
+Answer times on the shared CPU runner vary between runs (21 to 49 s on average); on a laptop with a
+GPU they are a few seconds. The set is small and fictional, so 100% here is a regression check, not a
+claim about real policies: measure yours with `sample-docs/private/eval/`.
 
 ## Principles
 
