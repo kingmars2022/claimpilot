@@ -159,6 +159,7 @@ class AccuracyEvaluationTest {
         }
 
         details.append("| Question | Expected | Got | Cited pages | Content | Time |\n|---|---|---|---|---|---|\n");
+        StringBuilder misses = new StringBuilder();
         for (JsonNode c : set.cases().path("questions")) {
             String policyId = ids.get(c.get("policy").asString());
             long start = System.nanoTime();
@@ -175,10 +176,10 @@ class AccuracyEvaluationTest {
             boolean pageMatch = true;
             if (c.hasNonNull("page")) {
                 score.pageCases++;
-                pageMatch = pages.contains(c.get("page").asInt());
+                pageMatch = EvalScoring.pageMatches(c.get("page"), pages);
                 score.pageOk += pageMatch ? 1 : 0;
             }
-            boolean contentMatch = contains(text, c.path("mustContain"));
+            boolean contentMatch = EvalScoring.contains(text, c.path("mustContain"));
             score.questions++;
             score.statusOk += statusMatch ? 1 : 0;
             score.contentOk += contentMatch ? 1 : 0;
@@ -187,6 +188,14 @@ class AccuracyEvaluationTest {
                     .append(" | ").append(status).append(statusMatch ? "" : " ✗").append(" | ").append(pages)
                     .append(pageMatch ? "" : " ✗").append(" | ").append(contentMatch ? "yes" : "no ✗")
                     .append(" | ").append(ms).append(" ms |\n");
+            if (!statusMatch || !pageMatch || !contentMatch) {
+                misses.append("- **").append(c.get("question").asString()).append("**: ")
+                        .append(EvalScoring.excerpt(text)).append('\n');
+            }
+        }
+        if (!misses.isEmpty()) {
+            // The answers themselves, to tell a wrong answer from a wrong expectation. The report stays local.
+            details.append("\nAnswers to the questions marked ✗:\n\n").append(misses);
         }
 
         details.append("\n| Document | Fact | Expected | Got | Verified |\n|---|---|---|---|---|\n");
@@ -205,17 +214,6 @@ class AccuracyEvaluationTest {
     }
 
     /** Every expected entry must appear; an entry "a|b" is satisfied by either alternative. */
-    static boolean contains(String text, JsonNode expected) {
-        String lower = text.toLowerCase(Locale.ROOT);
-        for (JsonNode entry : expected) {
-            boolean any = Stream.of(entry.asString().split("\\|"))
-                    .anyMatch(alt -> lower.contains(alt.toLowerCase(Locale.ROOT)));
-            if (!any) {
-                return false;
-            }
-        }
-        return true;
-    }
 
     private static CaseSet publicSet() throws IOException {
         Map<String, Doc> docs = new LinkedHashMap<>();

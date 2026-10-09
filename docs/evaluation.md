@@ -36,7 +36,8 @@ answer you expect, and the key facts that should be read from each document:
 
 - `status`: `ANSWERED` (the policy answers it), `UNCLEAR` (the policy leaves it open, for example "may be
   considered"), or `NOT_IN_POLICY`.
-- `page`: the page that holds the answer, or `null`.
+- `page`: the page that holds the answer, a list such as `[10, 13]` when several pages state it, or
+  `null`.
 - `mustContain`: words the answer must include; `"a|b"` accepts either.
 - `facts` keys: `INSURER_NAME`, `INSURER_PHONE`, `POLICY_NUMBER`, `CERTIFICATE_NUMBER`,
   `PLAN_MEMBER_NAME`, `PLAN_SPONSOR` for policies; `SERVICE_DATE`, `AMOUNT_CHARGED`, `PROVIDER_NAME`,
@@ -54,5 +55,6 @@ cd backend
 ./mvnw test -Peval
 ```
 
-`target/eval-report.md` then has one row per set (the public sample set and each of your files) and the
-details of every question. The report stays on your computer.
+`target/eval-report.md` then has one row per set (the public sample set and each of your files), the
+details of every question, and the full answer to each question marked ✗, so you can tell a wrong answer
+from a wrong expectation. The report stays on your computer.
