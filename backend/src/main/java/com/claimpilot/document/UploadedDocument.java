@@ -50,6 +50,7 @@ public class UploadedDocument {
     private Integer chunkCount;
 
     private String errorMessage;
+    private String warning;
 
     @Column(nullable = false)
     private Instant createdAt;
@@ -75,9 +76,16 @@ public class UploadedDocument {
     public void markProcessing() {
         this.status = DocumentStatus.PROCESSING;
         this.errorMessage = null;
+        this.warning = null;
     }
 
     public void markReady(Integer chunkCount) {
+        markReady(chunkCount, null);
+    }
+
+    /** @param warning a note for the member, for example that a receipt was uploaded as a policy */
+    public void markReady(Integer chunkCount, String warning) {
+        this.warning = warning;
         this.status = DocumentStatus.READY;
         this.chunkCount = chunkCount;
         this.processedAt = Instant.now();
@@ -135,5 +143,9 @@ public class UploadedDocument {
 
     public Instant getProcessedAt() {
         return processedAt;
+    }
+
+    public String getWarning() {
+        return warning;
     }
 }

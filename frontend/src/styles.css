@@ -1579,3 +1579,11 @@ code {
   max-width: 20rem;
   margin: 0.5rem 0;
 }
+
+.doc-warning {
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--warn);
+  background: var(--marker-soft);
+  color: var(--ink);
+}

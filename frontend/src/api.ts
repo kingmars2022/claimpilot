@@ -38,6 +38,8 @@ export interface UploadedDocument {
   createdAt: string;
   processedAt: string | null;
   facts: Fact[];
+  /** Set when the document reads like another kind, e.g. a receipt uploaded as a policy. */
+  warning: string | null;
 }
 
 export interface Citation {

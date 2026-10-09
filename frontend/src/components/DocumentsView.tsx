@@ -139,6 +139,7 @@ function DocumentList({
             </button>
           </div>
           {doc.status === 'FAILED' && <p className="error small">{doc.errorMessage}</p>}
+          {doc.status === 'READY' && doc.warning && <p className="doc-warning small">{doc.warning}</p>}
           {doc.status === 'READY' && <FactList facts={doc.facts} />}
           {(doc.status === 'UPLOADED' || doc.status === 'PROCESSING') && (
             <p className="muted small">Reading the document and its key details…</p>

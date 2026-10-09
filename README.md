@@ -90,6 +90,8 @@ the profile, so children from two relationships each get their own order:
 | The other parent has custody | The other parent's plan (then their spouse's), then yours, then your spouse's |
 | Joint custody | Birthday rule between the two parents, then step-parents |
 
+<img src="docs/screenshots/profile-children.png" alt="Profile: each child with a birth date, custody and the other parent" width="560">
+
 On the claim page, *Who is the claim for?* fills in the plan that paid first, the plan to claim the
 balance on and the relationship, with the rule that decided it. Cases the rules do not settle (two plans
 of one person, missing birthdays, only one plan) are shown as such, never guessed, and the explanation
@@ -482,4 +484,5 @@ Mac laptop, Apple silicon, Ollama: 20 s per answer on average.
   that decide which plan pays first.
 - [x] **Later**: separated-parents (custody) rules per child; five insurers' claim forms out of the box
   (health and dental, prescription drugs, vision) with reviewed mappings, plus a claim details sheet for
-  any insurer; keyword search (English and French) alongside vector search; reproducible sample PDFs.
+  any insurer; keyword search (English and French) alongside vector search; reproducible sample PDFs; a
+  warning when a receipt is uploaded as a policy (or the reverse).

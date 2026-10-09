@@ -99,6 +99,7 @@ public class ProcessingService {
         repository.save(doc);
 
         Integer chunkCount = null;
+        String warning;
         try {
             if (doc.getKind() == DocumentKind.FORM) {
                 chunkCount = countFormFields(doc);
@@ -119,6 +120,7 @@ public class ProcessingService {
             List<ExtractedFact> extracted = factExtractor.extract(doc, read.pages());
             facts.deleteByDocumentId(documentId);
             facts.saveAll(extracted.stream().map(f -> new DocumentFact(documentId, f)).toList());
+            warning = KindCheck.warning(doc.getKind(), read.pages(), extracted).orElse(null);
         } catch (Exception ex) {
             log.error("Processing failed for {}", doc.getFileName(), ex);
             repository.findById(documentId).ifPresent(fresh -> {
@@ -129,10 +131,14 @@ public class ProcessingService {
             return;
         }
 
-        markReady(documentId, chunkCount);
+        markReady(documentId, chunkCount, warning);
     }
 
     private void markReady(UUID documentId, Integer count) {
+        markReady(documentId, count, null);
+    }
+
+    private void markReady(UUID documentId, Integer count, String warning) {
         UploadedDocument fresh = repository.findById(documentId).orElse(null);
         if (fresh == null) {
             // Deleted while processing: remove the chunks just added so nothing is left behind.
@@ -140,7 +146,7 @@ public class ProcessingService {
             facts.deleteByDocumentId(documentId);
             return;
         }
-        fresh.markReady(count);
+        fresh.markReady(count, warning);
         repository.save(fresh);
         log.info("Processed {} {}", fresh.getKind(), fresh.getFileName());
         publish(fresh);

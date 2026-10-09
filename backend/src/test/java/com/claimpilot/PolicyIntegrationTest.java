@@ -71,6 +71,26 @@ class PolicyIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void aReceiptUploadedAsAPolicyIsFlagged() throws Exception {
+        String body = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .post("/api/auth/register").contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("username", "wrong.place", "displayName", "Wrong Place",
+                                "password", "password123"))))
+                .andReturn().getResponse().getContentAsString();
+        String newcomer = JsonPath.read(body, "$.token");
+
+        String id = upload(newcomer, "policies", SampleDocuments.RECEIPT_PDF, SampleDocuments.receiptPdf());
+
+        String doc = mvc.perform(as(newcomer, get("/api/policies/" + id))).andReturn().getResponse()
+                .getContentAsString();
+        assertThat((String) JsonPath.read(doc, "$.status")).isEqualTo("READY");
+        assertThat((String) JsonPath.read(doc, "$.warning")).contains("looks like a receipt");
+        String spousePolicy = mvc.perform(as(token, get("/api/policies/" + policyId))).andReturn().getResponse()
+                .getContentAsString();
+        assertThat((Object) JsonPath.read(spousePolicy, "$.warning")).as("a real policy").isNull();
+    }
+
+    @Test
     void questionTheyPolicyDoesNotCoverGetsACallKitWithoutAModelCall() throws Exception {
         String answer = ask(token, policyId, "Is laser eye surgery included?", null);
 

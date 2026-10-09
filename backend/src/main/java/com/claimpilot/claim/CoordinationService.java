@@ -119,6 +119,8 @@ public class CoordinationService {
     private List<CoordinationOfBenefits.Plan> plans(AppUser user) {
         return documents.list(user, DocumentKind.POLICY).stream()
                 .filter(d -> d.status() == DocumentStatus.READY)
+                // A document flagged as probably a receipt is not a plan.
+                .filter(d -> d.warning() == null)
                 .map(d -> new CoordinationOfBenefits.Plan(d.id(), label(d), fact(d, FactKey.PLAN_MEMBER_NAME),
                         fact(d, FactKey.POLICY_NUMBER)))
                 .toList();

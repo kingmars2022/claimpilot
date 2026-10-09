@@ -21,7 +21,8 @@ public record DocumentResponse(
         String errorMessage,
         Instant createdAt,
         Instant processedAt,
-        List<Fact> facts) {
+        List<Fact> facts,
+        String warning) {
 
     public record Fact(String key, String value, String quote, Integer page, boolean verified) {
     }
@@ -32,6 +33,7 @@ public record DocumentResponse(
                 facts.stream()
                         .sorted(Comparator.comparing(f -> f.getKey().ordinal()))
                         .map(f -> new Fact(f.getKey().name(), f.getValue(), f.getQuote(), f.getPage(), f.isVerified()))
-                        .toList());
+                        .toList(),
+                doc.getWarning());
     }
 }

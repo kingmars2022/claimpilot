@@ -95,6 +95,6 @@ class CoordinationServiceTest {
                         new DocumentResponse.Fact(FactKey.INSURER_NAME.name(), insurer, insurer, 1, true),
                         new DocumentResponse.Fact(FactKey.PLAN_MEMBER_NAME.name(), member, member, 1, true),
                         new DocumentResponse.Fact(FactKey.POLICY_NUMBER.name(), id.toString(), id.toString(), 1,
-                                true)));
+                                true)), null);
     }
 }
