@@ -31,6 +31,15 @@ class UnmentionedItemTest {
     }
 
     @Test
+    void anEverydayWordIsNamedWhenThePolicyUsesItsOwnTerm() {
+        List<Document> vaccines = List.of(doc("Vaccines are reimbursed at 80% when given by a pharmacist."));
+
+        assertThat(UnmentionedItem.applies("Are flu shots covered?", AnswerLanguage.ENGLISH, vaccines))
+                .as("shots = vaccines").isFalse();
+        assertThat(UnmentionedItem.applies("Are flu shots covered?", AnswerLanguage.ENGLISH, PARAMEDICAL)).isTrue();
+    }
+
+    @Test
     void theRuleStaysOutOfCasesItCannotJudge() {
         List<Document> withExclusions = List.of(doc("The plan does not cover: cosmetic procedures."));
         assertThat(UnmentionedItem.applies("Is Botox for wrinkles covered?", AnswerLanguage.ENGLISH, withExclusions))

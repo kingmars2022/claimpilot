@@ -55,6 +55,20 @@ class KeywordSearchTest {
     }
 
     @Test
+    void aConceptMatchesWhenTheChunkHoldsAnyOfItsWords() {
+        // "a car I rent": the policy says "vehicles of which the named insured is not owner".
+        List<KeywordSearch.Chunk> chunks = List.of(
+                chunk("liability", Map.of("damag", 1, "vehicl", 2, "owner", 1, "liabil", 1)),
+                chunk("payment", Map.of("payment", 3, "fee", 1)));
+        List<Set<String>> concepts = List.of(Set.of("damag"), Set.of("car", "vehicl"), Set.of("rent", "owner"),
+                Set.of("drive"));
+
+        assertThat(KeywordSearch.rank(concepts, chunks, 5)).extracting(Document::getId).containsExactly("liability");
+        assertThat(KeywordSearch.rank(Set.of("damag", "car", "rent", "drive"), chunks, 5))
+                .as("without the policy's words, one concept of four").isEmpty();
+    }
+
+    @Test
     void theQuestionIsStemmedInItsOwnLanguage() {
         assertThat(KeywordSearch.config("Is massage therapy covered?")).isEqualTo("english");
         assertThat(KeywordSearch.config("Est-ce que la massothérapie est couverte ?")).isEqualTo("french");

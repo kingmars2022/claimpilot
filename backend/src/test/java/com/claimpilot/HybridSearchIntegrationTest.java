@@ -74,6 +74,15 @@ class HybridSearchIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void anEverydayWordFindsThePolicysOwnTerm() {
+        // The booklet never says "braces": it says "Orthodontic treatment is not covered".
+        List<Document> found = keywords.search("Are braces covered?", owner, booklet, 5);
+
+        assertThat(found).isNotEmpty();
+        assertThat(found.getFirst().getMetadata().get(ProcessingService.META_PAGE)).isEqualTo(4);
+    }
+
+    @Test
     void aCoverageQuestionGetsTheExclusions() {
         List<Document> exclusions = keywords.exclusions("Is Botox for wrinkles covered?", owner, booklet, 2);
 

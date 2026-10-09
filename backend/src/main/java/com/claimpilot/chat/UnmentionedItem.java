@@ -7,6 +7,8 @@ import java.util.regex.Pattern;
 
 import org.springframework.ai.document.Document;
 
+import com.claimpilot.search.PolicyTerms;
+
 /**
  * "Is acupuncture covered?" when no clause found for the policy says "acupuncture": the policy
  * does not address it, whatever else the clauses say. When the model calls such a question unclear,
@@ -58,9 +60,15 @@ final class UnmentionedItem {
         if (EXCLUSION.matcher(clauses).find()) {
             return java.util.Optional.empty();
         }
-        // Compared by the first five letters, so "acupuncturist" still names "acupuncture".
-        boolean named = items.stream().anyMatch(item -> clauses.contains(item.substring(0, Math.min(5, item.length()))));
+        // Compared by the first five letters, so "acupuncturist" still names "acupuncture"; an everyday
+        // word also counts as named when the policy uses its own term for it ("shots", "vaccines").
+        boolean named = items.stream().anyMatch(item -> mentions(clauses, item)
+                || PolicyTerms.policyWords(item).stream().anyMatch(term -> mentions(clauses, term)));
         return named ? java.util.Optional.empty() : java.util.Optional.of(String.join(" ", items));
+    }
+
+    private static boolean mentions(String clauses, String word) {
+        return clauses.contains(word.toLowerCase(Locale.ROOT).substring(0, Math.min(5, word.length())));
     }
 
     static String answer(String item) {

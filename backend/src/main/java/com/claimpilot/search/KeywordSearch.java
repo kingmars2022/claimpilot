@@ -3,8 +3,11 @@ package com.claimpilot.search;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -64,6 +67,8 @@ public class KeywordSearch {
     private static final Pattern FRENCH = Pattern.compile(
             "(?i)[éèêàâçîôûù]|\\b(?:est-ce|quel|quelle|combien|pour|les|des|une|mon|ma|mes|remboursé|couvert)\\b");
 
+    private static final Pattern WORD = Pattern.compile("[a-z]+");
+
     private static final String OWNER = "metadata->>'" + OwnerScope.META_OWNER_ID + "'";
     private static final String DOCUMENT = "metadata->>'" + ProcessingService.META_DOCUMENT_ID + "'";
     private static final String CHUNK_INDEX = "(metadata->>'" + ProcessingService.META_CHUNK_INDEX + "')::int";
@@ -100,10 +105,8 @@ public class KeywordSearch {
         if (!available || config == null) {
             return List.of();
         }
-        Set<String> terms = new java.util.HashSet<>(lexemes(jdbc.queryForObject(
-                "SELECT to_tsvector(?::regconfig, ?)::text", String.class, config, question)).keySet());
-        terms.removeAll(DOMAIN_WORDS);
-        if (terms.isEmpty()) {
+        List<Set<String>> concepts = concepts(question, config);
+        if (concepts.isEmpty()) {
             return List.of();
         }
         Map<String, Object> size = jdbc.queryForMap(
@@ -117,8 +120,51 @@ public class KeywordSearch {
         List<Chunk> candidates = jdbc.query(
                 "SELECT id::text, content, metadata::text, stems::text FROM vector_store "
                         + "WHERE " + DOCUMENT + " = ? AND " + OWNER + " = ? AND stems @@ ?::tsquery",
-                CHUNK, policyId.toString(), ownerId.toString(), anyOf(terms));
-        return rank(terms, candidates, limit, n, averageLength);
+                CHUNK, policyId.toString(), ownerId.toString(),
+                anyOf(concepts.stream().flatMap(Set::stream).collect(Collectors.toSet())));
+        return rank(concepts, candidates, limit, n, averageLength);
+    }
+
+    /**
+     * The question as concepts: each stem of the question, together with the policy's words for it
+     * when it is an everyday word ("rent" also matches "owner", see {@link PolicyTerms}). A chunk
+     * matches a concept when it holds any of its stems.
+     */
+    private List<Set<String>> concepts(String question, String config) {
+        List<Set<String>> concepts = new ArrayList<>();
+        Map<String, Set<String>> byStem = new HashMap<>();
+        for (String stem : stems(config, question)) {
+            if (!DOMAIN_WORDS.contains(stem)) {
+                Set<String> concept = new HashSet<>(Set.of(stem));
+                concepts.add(concept);
+                byStem.put(stem, concept);
+            }
+        }
+        if (!"english".equals(config)) {
+            return concepts;
+        }
+        Matcher words = WORD.matcher(question.toLowerCase(Locale.ROOT));
+        while (words.find()) {
+            List<String> policyWords = PolicyTerms.policyWords(words.group());
+            if (policyWords.isEmpty()) {
+                continue;
+            }
+            Set<String> wordStems = stems(config, words.group());
+            Set<String> concept = wordStems.stream().map(byStem::get).filter(Objects::nonNull).findFirst()
+                    .orElse(null);
+            if (concept == null) {
+                continue;
+            }
+            Set<String> extra = stems(config, String.join(" ", policyWords));
+            extra.removeAll(DOMAIN_WORDS);
+            concept.addAll(extra);
+        }
+        return concepts;
+    }
+
+    private Set<String> stems(String config, String text) {
+        return new HashSet<>(lexemes(jdbc.queryForObject("SELECT to_tsvector(?::regconfig, ?)::text", String.class,
+                config, text)).keySet());
     }
 
     /**
@@ -149,22 +195,29 @@ public class KeywordSearch {
         return FRENCH.matcher(question).find() ? "french" : "english";
     }
 
-    /** Ranks chunks that are the whole collection (used by tests). */
+    /** Ranks chunks that are the whole collection, one concept per term (used by tests). */
     static List<Document> rank(Set<String> terms, List<Chunk> chunks, int limit) {
+        return rank(terms.stream().map(Set::of).toList(), chunks, limit);
+    }
+
+    static List<Document> rank(List<Set<String>> concepts, List<Chunk> chunks, int limit) {
         double averageLength = chunks.stream().mapToInt(Chunk::length).average().orElse(1);
-        return rank(terms, chunks, limit, chunks.size(), averageLength);
+        return rank(concepts, chunks, limit, chunks.size(), averageLength);
     }
 
     /**
      * BM25 over the candidates. Every chunk holding a query word is a candidate, so a word's
      * document frequency counted over the candidates is its frequency over the whole policy.
      */
-    static List<Document> rank(Set<String> terms, List<Chunk> candidates, int limit, int n, double averageLength) {
+    static List<Document> rank(List<Set<String>> concepts, List<Chunk> candidates, int limit, int n,
+                               double averageLength) {
         Map<String, Integer> documentFrequency = new HashMap<>();
         for (Chunk chunk : candidates) {
-            for (String term : terms) {
-                if (chunk.frequencies().containsKey(term)) {
-                    documentFrequency.merge(term, 1, Integer::sum);
+            for (Set<String> concept : concepts) {
+                for (String term : concept) {
+                    if (chunk.frequencies().containsKey(term)) {
+                        documentFrequency.merge(term, 1, Integer::sum);
+                    }
                 }
             }
         }
@@ -174,17 +227,24 @@ public class KeywordSearch {
         for (Chunk chunk : candidates) {
             double score = 0;
             int matched = 0;
-            for (String term : terms) {
-                int tf = chunk.frequencies().getOrDefault(term, 0);
-                if (tf == 0) {
-                    continue;
+            for (Set<String> concept : concepts) {
+                double best = 0;
+                for (String term : concept) {
+                    int tf = chunk.frequencies().getOrDefault(term, 0);
+                    if (tf == 0) {
+                        continue;
+                    }
+                    int df = documentFrequency.get(term);
+                    double idf = Math.log(1 + (n - df + 0.5) / (df + 0.5));
+                    best = Math.max(best,
+                            idf * tf * (K1 + 1) / (tf + K1 * (1 - B + B * chunk.length() / averageLength)));
                 }
-                matched++;
-                int df = documentFrequency.get(term);
-                double idf = Math.log(1 + (n - df + 0.5) / (df + 0.5));
-                score += idf * tf * (K1 + 1) / (tf + K1 * (1 - B + B * chunk.length() / averageLength));
+                if (best > 0) {
+                    matched++;
+                    score += best;
+                }
             }
-            if (matched > 0 && matched * 2 >= terms.size()) {
+            if (matched > 0 && matched * 2 >= concepts.size()) {
                 scored.add(new Scored(chunk.document(), score));
             }
         }
