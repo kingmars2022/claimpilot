@@ -204,7 +204,8 @@ Shown at the top of this page. When the claim is started:
   which is deterministic and unit-tested.
 - **Hard rules in code, not in the prompt.** Signature, declaration and consent fields are forced to
   stay blank even if the model maps them to a value (a test checks exactly that). An "answered"
-  reply that cites nothing is downgraded to "unclear", and so is one that rests on a discretionary
+  reply that cites nothing is downgraded to "unclear", a word-for-word quote that cites the wrong excerpt
+  is re-pointed to the excerpt that holds it, and a reply that rests on a discretionary
   clause ("may be considered", "at the insurer's discretion"). Two "unclear" replies are settled by
   code: a question with an amount against a clause with a threshold ("a $900 plan", "over $500") is
   answered by comparing the numbers, and a coverage question about an item no clause names
@@ -431,6 +432,30 @@ How each miss was fixed, all without a larger model:
 Answer times on the shared CPU runner vary between runs (21 to 49 s on average, 29 s on the last); on a laptop with a
 GPU they are a few seconds. The set is small and fictional, so 100% here is a regression check, not a
 claim about real policies: measure yours with `sample-docs/private/eval/`.
+
+**On a real policy.** The same evaluation ran on a real Quebec car insurance policy (14 pages, kept
+private: neither the document nor its questions are in this repository), with 16 questions written from
+the document before the first run:
+
+| Metric | First run | Second run (first two fixes below) |
+|---|---|---|
+| Answer status | 15 / 16 | **16 / 16** |
+| Cited the expected page | 12 / 15 | 14 / 15 |
+| Answer contains the expected facts | 15 / 16 | **16 / 16** |
+| Key facts extracted correctly | 3 / 3 | 3 / 3 |
+
+What the real policy found, and what changed:
+- *Am I covered for damage to a car I rent?* was answered "not in the policy": the policy never says
+  "rent", it says "vehicles of which the named insured is not owner". A short table of everyday words and
+  policy terms (car/vehicle, rent/not owner, shots/vaccines, braces/orthodontic...) now feeds keyword search
+  and the not-in-policy rule, and the answer is right.
+- *When does my policy period end?* cited the insurance card instead of the declarations page; both state
+  the period, so the evaluation now accepts a list of pages.
+- *Is there a deductible if my car is stolen?* quoted the right sentence word for word but numbered it as
+  another excerpt, from another page. Code now checks every quote against the excerpt it cites and
+  re-points the citation to the excerpt that holds it (added after the second run).
+
+Mac laptop, Apple silicon, Ollama: 20 s per answer on average.
 
 ## Principles
 

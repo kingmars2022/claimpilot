@@ -83,9 +83,11 @@ public class ChatService {
             PromptBuilder.ParsedReply reply = PromptBuilder.parse(model.complete(user.getId(),
                     promptBuilder.systemPrompt(language),
                     promptBuilder.userPrompt(question, sources, history, language)));
-            citations = citationsUsed(reply.text(), sources);
+            // A word-for-word quote must point at the excerpt that holds it.
+            String replyText = QuoteCitations.fix(reply.text(), sources);
+            citations = citationsUsed(replyText, sources);
             status = reply.status().orElse(citations.isEmpty() ? AnswerStatus.UNCLEAR : AnswerStatus.ANSWERED);
-            answer = reply.text();
+            answer = replyText;
             if (status == AnswerStatus.ANSWERED && citations.isEmpty()) {
                 // An answer that cites nothing is not grounded: treat it as unclear and show the clauses.
                 status = AnswerStatus.UNCLEAR;
