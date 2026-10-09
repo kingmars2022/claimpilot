@@ -14,6 +14,8 @@ jobs:
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
+      - name: Pull Docker Hub images through a cache (avoids Docker Hub's rate limit)
+        run: .github/scripts/docker-hub-mirror.sh
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
